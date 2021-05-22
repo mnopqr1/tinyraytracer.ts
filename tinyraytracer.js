@@ -47,15 +47,6 @@ function updateCanvas() {
     canvas.getContext('2d').putImageData(canvas_buffer, 0, 0);
 }
 /******************** SCENE AND CAMERA *********************/
-var Scene = /** @class */ (function () {
-    function Scene(camera, spheres, bgcolor) {
-        this.camera = camera;
-        this.spheres = spheres;
-        this.bgcolor = bgcolor;
-        return this;
-    }
-    return Scene;
-}());
 var Camera = /** @class */ (function () {
     function Camera(position, direction, vw, vh) {
         this.position = position;
@@ -68,6 +59,8 @@ var Camera = /** @class */ (function () {
 }());
 /********************* SCENE OBJECTS **************************/
 // Sphere
+// Material
+// Light
 var Sphere = /** @class */ (function () {
     function Sphere(c, r, m) {
         this.c = c;
@@ -77,14 +70,35 @@ var Sphere = /** @class */ (function () {
         return this;
     }
     // checks for intersection between sphere and ray
-    Sphere.prototype.intersects = function (ray) {
-        var vpc = this.c.minus(ray.p); // from ray origin to sphere center
-        if (vpc.dot(ray.d) < 0) { // is sphere center behind ray origin?
-            return (vpc.lengthsq() <= this.rsq); // check if ray origin is inside the sphere
+    // returns either the smallest t such that ray.o + t * ray.d is on the sphere, or false if none such exists
+    Sphere.prototype.intersection = function (ray) {
+        var vPC = this.c.minus(ray.o); // from ray origin to sphere center
+        var b = vPC.dot(ray.d); // time b such that ray.o + t * ray.d is the projection of this.c onto the ray
+        var Ls = vPC.lengthsq();
+        if (b < 0) { // is sphere center behind ray origin?
+            if (Ls <= this.rsq) { // check if ray origin is inside the sphere
+                return false; // TODO for now we just don't draw the sphere if we're inside
+            }
+            else {
+                return false;
+            }
         }
         else {
-            var vProjected = vpc.projectOn(ray); // find the projection onto the ray
-            return (this.c.distancesq(vProjected) <= this.rsq);
+            var D = b * b + this.rsq - Ls; // discriminant = b^2 + r^2 - L^2
+            if (D < 0) {
+                return false;
+            }
+            else {
+                var sqD = Math.sqrt(D);
+                var t1 = b - sqD;
+                var t2 = b + sqD;
+                if (ray.atTime(t1).distancesq(ray.o) < ray.atTime(t2).distancesq(ray.o)) {
+                    return t1;
+                }
+                else {
+                    return t2;
+                }
+            }
         }
     };
     return Sphere;
@@ -92,8 +106,17 @@ var Sphere = /** @class */ (function () {
 var Material = /** @class */ (function () {
     function Material(color) {
         this.color = color;
+        return this;
     }
     return Material;
+}());
+var Light = /** @class */ (function () {
+    function Light(position, intensity) {
+        this.position = position;
+        this.intensity = intensity;
+        return this;
+    }
+    return Light;
 }());
 /********************* INTERNAL TYPES *************/
 // Pt2: two-dimensional point
@@ -156,10 +179,6 @@ var Vec3 = /** @class */ (function () {
     Vec3.prototype.normalize = function () {
         return new Vec3n(this.x, this.y, this.z);
     };
-    Vec3.prototype.projectOn = function (r) {
-        var dScaled = r.d.scale(this.dot(r.d));
-        return r.p.translate(dScaled);
-    };
     Vec3.prototype.scale = function (r) {
         return new Vec3(r * this.x, r * this.y, r * this.z);
     };
@@ -190,11 +209,14 @@ var Vec3n = /** @class */ (function (_super) {
     return Vec3n;
 }(Vec3));
 var Ray = /** @class */ (function () {
-    function Ray(p, d) {
-        this.p = p;
+    function Ray(o, d) {
+        this.o = o;
         this.d = d;
         return this;
     }
+    Ray.prototype.atTime = function (t) {
+        return this.o.translate(this.d.scale(t));
+    };
     return Ray;
 }());
 // Rectangle in 3D space:
@@ -219,6 +241,9 @@ var Color = /** @class */ (function () {
         this.b = b;
         return this;
     }
+    Color.prototype.scale = function (i) {
+        return new Color(this.r * i, this.g * i, this.b * i);
+    };
     return Color;
 }());
 /********************* RENDERING FUNCTION ***************/
@@ -235,29 +260,53 @@ function render(scene) {
             var p = c.pmult(canvToViewport); // corresponding point on viewport
             var pvc = new Pt3(p.x - scene.camera.viewport.c.x, p.y - scene.camera.viewport.c.y, 0); // from viewport center to point
             var dir = scene.camera.direction.plus(pvc).normalize();
-            var col = castRay(new Ray(campos, dir), scene.spheres, scene.bgcolor);
+            var col = castRay(new Ray(campos, dir), scene);
             // if (y == 0 && x == cwidth/2 - 1) { console.log(p); console.log(dir); console.log(col); }
             putPixel(c, col);
         }
     }
 }
-function castRay(ray, spheres, bg) {
-    for (var _i = 0, spheres_1 = spheres; _i < spheres_1.length; _i++) {
-        var s = spheres_1[_i];
-        if (s.intersects(ray)) {
-            return s.material.color;
+function castRay(ray, scene) {
+    var min_t = Infinity;
+    var hit_sphere = null;
+    for (var _i = 0, _a = scene.spheres; _i < _a.length; _i++) {
+        var s = _a[_i];
+        var t = s.intersection(ray);
+        if (t && t < min_t) {
+            min_t = t;
+            hit_sphere = s;
         }
     }
-    return bg; // return background color if no intersection found
+    if (hit_sphere === null) {
+        return scene.bgcolor; // return background color if no intersection found
+    }
+    else {
+        var intersectionPoint = ray.o.translate(ray.d.scale(min_t));
+        var diffuseLightIntensity = 0;
+        for (var _b = 0, _c = scene.lights; _b < _c.length; _b++) {
+            var l = _c[_b];
+            var lightDirection = l.position.minus(intersectionPoint).normalize();
+            diffuseLightIntensity += l.intensity * Math.max(0, -lightDirection.dot(ray.d));
+        }
+        return hit_sphere.material.color.scale(diffuseLightIntensity);
+    }
 }
 /************* EXAMPLE CAMERA AND SCENE SETUP ***************/
 var camera = new Camera(new Pt3(0, 0, -1), new Vec3(0, 0, 1), 3, 3);
 var red = new Material(new Color(1, 0, 0));
 var green = new Material(new Color(0, 1, 0));
-var scene = new Scene(camera, [new Sphere(new Pt3(-3, 0, 16), 2, red),
-    new Sphere(new Pt3(-1, -1.5, 12), 2, red),
-    new Sphere(new Pt3(1.5, 0.5, 18), 3, green),
-    new Sphere(new Pt3(7, 5, 18), 4, green)], new Color(0.2, 0.7, 0.8));
+var scene = {
+    camera: camera,
+    spheres: [
+        new Sphere(new Pt3(-3, 0, 11), 2, red),
+        new Sphere(new Pt3(-1, -1.5, 12), 2, red),
+        new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
+        new Sphere(new Pt3(7, 5, 11), 4, green),
+    ],
+    bgcolor: new Color(0.2, 0.7, 0.8),
+    lights: [new Light(new Pt3(0, 4, 11), 1),
+        new Light(new Pt3(-4, 0, 10), 1)]
+};
 /********************* ENTRY POINT **********************/
 function main() {
     render(scene);

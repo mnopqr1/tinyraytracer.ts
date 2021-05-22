@@ -13,3 +13,5 @@
 * 13:48 - ALMOST got step 2 to work, after a lot of struggles with vectors and viewports, but there's still a problem: the sphere shows up as ellipses.
 
 * 14:10 - After a lot of thinking and experimenting, saw that non-centered spheres actually also shows up as an ellipse in the tutorial code, so maybe it's ok. Will now check with reference scene from tutorial to check that pictures match.
+
+* 15:44 - Pictures matched, there is some light, but something is wrong with the sign of the direction in the calculation of the normal. Arriving in Paris.

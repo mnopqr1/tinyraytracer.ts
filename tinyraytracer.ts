@@ -41,18 +41,6 @@ function updateCanvas() {
 
 
 /******************** SCENE AND CAMERA *********************/
-class Scene {
-    camera : Camera;
-    spheres : Sphere[];
-    bgcolor : Color;
-
-    constructor(camera, spheres, bgcolor) {
-	this.camera = camera;
-	this.spheres = spheres;
-	this.bgcolor = bgcolor;
-	return this;
-    }
-}
 
 class Camera {
     position : Pt3;
@@ -71,6 +59,8 @@ class Camera {
 
 /********************* SCENE OBJECTS **************************/
 // Sphere
+// Material
+// Light
 
 
 class Sphere {
@@ -88,13 +78,32 @@ class Sphere {
     }
 
     // checks for intersection between sphere and ray
-    intersects(ray : Ray) : boolean {
-	let vpc : Vec3 = this.c.minus(ray.p); // from ray origin to sphere center
-	if (vpc.dot(ray.d) < 0) {             // is sphere center behind ray origin?
-	    return (vpc.lengthsq() <= this.rsq);   // check if ray origin is inside the sphere
+    // returns either the smallest t such that ray.o + t * ray.d is on the sphere, or false if none such exists
+    intersection(ray : Ray) : (number | boolean) {
+	
+	let vPC : Vec3 = this.c.minus(ray.o); // from ray origin to sphere center
+	let b : number = vPC.dot(ray.d);      // time b such that ray.o + t * ray.d is the projection of this.c onto the ray
+        let Ls : number = vPC.lengthsq();
+	if (b < 0) {             // is sphere center behind ray origin?
+	    if (Ls <= this.rsq) { // check if ray origin is inside the sphere
+		return false; // TODO for now we just don't draw the sphere if we're inside
+		
+	    } else {
+		return false;
+	    }
 	} else {
-	    let vProjected : Pt3 = vpc.projectOn(ray); // find the projection onto the ray
-	    return (this.c.distancesq(vProjected) <= this.rsq);
+	    let D : number = b * b + this.rsq - Ls; // discriminant = b^2 + r^2 - L^2
+	    if (D < 0) { return false; }
+	    else { 
+		let sqD : number = Math.sqrt(D);
+		let t1 : number = b - sqD;
+		let t2 : number = b + sqD;
+		if (ray.atTime(t1).distancesq(ray.o) < ray.atTime(t2).distancesq(ray.o)) {
+		    return t1;
+		} else {
+		    return t2;
+		}
+	    }
 	}
     }
 }
@@ -104,6 +113,18 @@ class Material {
 
     constructor(color : Color) {
 	this.color = color;
+	return this;
+    }
+}
+
+class Light {
+    position : Pt3;
+    intensity : number;
+
+    constructor(position : Pt3, intensity : number) {
+	this.position = position;
+	this.intensity = intensity;
+	return this;
     }
 }
 
@@ -188,11 +209,6 @@ class Vec3 {
 	return new Vec3n(this.x,this.y,this.z);
     }
 
-    projectOn(r : Ray) : Pt3 {
-	let dScaled : Vec3 = r.d.scale(this.dot(r.d));
-	return r.p.translate(dScaled);
-    }
-
     scale(r : number) : Vec3 {
 	return new Vec3(r * this.x, r * this.y, r * this.z);
     }
@@ -223,13 +239,17 @@ class Vec3n extends Vec3 {
 }
 
 class Ray {
-    p : Pt3;
+    o : Pt3;
     d : Vec3n;
 
-    constructor(p, d) {
-	this.p = p;
+    constructor(o, d) {
+	this.o = o;
 	this.d = d;
 	return this;
+    }
+
+    atTime(t : number) {
+	return this.o.translate(this.d.scale(t));
     }
 }
 
@@ -263,12 +283,16 @@ class Color {
 	this.b = b;
 	return this;
     }
+
+    scale(i : number) {
+	return new Color(this.r * i, this.g * i, this.b * i);
+    }
 }
 
 
 
 /********************* RENDERING FUNCTION ***************/
-function render(scene : Scene) {
+function render(scene) {
     let cwidth : number = canvas.width;
     let cheight : number = canvas.height;
     let vwidth : number = scene.camera.viewport.w;
@@ -284,7 +308,7 @@ function render(scene : Scene) {
 	    let p = c.pmult(canvToViewport); // corresponding point on viewport
 	    let pvc = new Pt3(p.x - scene.camera.viewport.c.x, p.y - scene.camera.viewport.c.y, 0); // from viewport center to point
 	    let dir : Vec3n = scene.camera.direction.plus(pvc).normalize();
-	    let col : Color = castRay(new Ray(campos, dir), scene.spheres, scene.bgcolor);
+	    let col : Color = castRay(new Ray(campos, dir), scene);
 	    // if (y == 0 && x == cwidth/2 - 1) { console.log(p); console.log(dir); console.log(col); }
 	    putPixel(c, col);
 	}
@@ -293,13 +317,28 @@ function render(scene : Scene) {
 
 
 
-function castRay(ray : Ray, spheres : Sphere[], bg : Color) : Color {
-    for (var s of spheres) {
-	if (s.intersects(ray)) {
-	    return s.material.color;
+function castRay(ray : Ray, scene) : Color {
+    let min_t : number = Infinity;
+    let hit_sphere : Sphere = null;
+    for (var s of scene.spheres) {
+	let t = s.intersection(ray);
+	if (t && t < min_t) {
+	    min_t = t;
+	    hit_sphere = s;
 	}
     }
-    return bg; // return background color if no intersection found
+    if (hit_sphere === null) {
+	return scene.bgcolor; // return background color if no intersection found
+    } else {
+	let intersectionPoint : Pt3 = ray.o.translate(ray.d.scale(min_t));
+	let diffuseLightIntensity : number = 0;
+	for (var l of scene.lights) {
+	    let lightDirection : Vec3n = l.position.minus(intersectionPoint).normalize();
+	    diffuseLightIntensity += l.intensity * Math.max(0, -lightDirection.dot(ray.d));
+	}
+	return hit_sphere.material.color.scale(diffuseLightIntensity);
+    }
+
 }
     
 
@@ -315,14 +354,18 @@ let camera : Camera = new Camera(
 let red : Material = new Material( new Color(1,0,0) );
 let green : Material = new Material( new Color(0, 1, 0) );
 
-let scene : Scene = new Scene(
+let scene = {
     camera,
-    [new Sphere(new Pt3(-3,0,16), 2, red),
-     new Sphere(new Pt3(-1,-1.5,12), 2, red),
-     new Sphere(new Pt3(1.5, 0.5, 18), 3, green),
-     new Sphere(new Pt3(7, 5, 18), 4, green)],
-    new Color(0.2, 0.7, 0.8)
-);
+    spheres: [
+	new Sphere(new Pt3(-3,0,11), 2, red),
+        new Sphere(new Pt3(-1,-1.5,12), 2, red),
+        new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
+	new Sphere(new Pt3(7, 5, 11), 4, green),
+    ],
+    bgcolor: new Color(0.2, 0.7, 0.8),
+    lights: [new Light(new Pt3(0, 4, 11), 1),
+	     new Light(new Pt3(-4, 0, 10), 1)]
+};
 
 /********************* ENTRY POINT **********************/
 function main() {
