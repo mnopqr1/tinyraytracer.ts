@@ -34,54 +34,30 @@ function updateCanvas() {
 /********************* SCENE TYPES **************************/
 // Sphere
 var Sphere = /** @class */ (function () {
-    function Sphere(c, r) {
-        this.c = c;
-        this.r = r;
-        return this;
+    function Sphere() {
     }
     return Sphere;
 }());
 /********************* INTERNAL TYPES *************/
 // Pt2: two-dimensional point
-// Pt3: three-dimensional point
 // Color: RGB color
 // a two-dimensional point is a pair of integers
 // x is between -canvas.width / 2 and +canvas.width / 2
 // y is between -canvas.height / 2 and +canvas.height / 2
-var Pt2 = /** @class */ (function () {
-    function Pt2(x, y) {
-        this.x = x;
-        this.y = y;
-        return this;
-    }
-    return Pt2;
-}());
-var Pt3 = /** @class */ (function () {
-    function Pt3(x, y, z) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        return this;
-    }
-    return Pt3;
-}());
+function Pt2(x, y) {
+    return { x: x, y: y };
+}
 // a color is a tuple of 3 floats between 0 and 1
-var Color = /** @class */ (function () {
-    function Color(r, g, b) {
-        this.r = r;
-        this.g = g;
-        this.b = b;
-        return this;
-    }
-    return Color;
-}());
+function Color(r, g, b) {
+    return { r: r, g: g, b: b };
+}
 /********************* RENDERING FUNCTION ***************/
 function render() {
     var width = canvas.width;
     var height = canvas.height;
     for (var y = -height / 2; y < height / 2; y++) {
         for (var x = -width / 2; x < width / 2; x++) {
-            putPixel(new Pt2(x, y), new Color((height / 2 - y) / height, (x + width / 2) / width, 0));
+            putPixel(Pt2(x, y), Color((height / 2 - y) / height, (x + width / 2) / width, 0));
         }
     }
 }
