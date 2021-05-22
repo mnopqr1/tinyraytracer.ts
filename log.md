@@ -11,3 +11,5 @@
 * 12:22 - took a quick lunch break.
 
 * 13:48 - ALMOST got step 2 to work, after a lot of struggles with vectors and viewports, but there's still a problem: the sphere shows up as ellipses.
+
+* 14:10 - After a lot of thinking and experimenting, saw that non-centered spheres actually also shows up as an ellipse in the tutorial code, so maybe it's ok. Will now check with reference scene from tutorial to check that pictures match.

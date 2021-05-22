@@ -48,9 +48,10 @@ function updateCanvas() {
 }
 /******************** SCENE AND CAMERA *********************/
 var Scene = /** @class */ (function () {
-    function Scene(camera, spheres) {
+    function Scene(camera, spheres, bgcolor) {
         this.camera = camera;
         this.spheres = spheres;
+        this.bgcolor = bgcolor;
         return this;
     }
     return Scene;
@@ -68,10 +69,11 @@ var Camera = /** @class */ (function () {
 /********************* SCENE OBJECTS **************************/
 // Sphere
 var Sphere = /** @class */ (function () {
-    function Sphere(c, r) {
+    function Sphere(c, r, m) {
         this.c = c;
         this.r = r;
         this.rsq = r * r;
+        this.material = m;
         return this;
     }
     // checks for intersection between sphere and ray
@@ -86,6 +88,12 @@ var Sphere = /** @class */ (function () {
         }
     };
     return Sphere;
+}());
+var Material = /** @class */ (function () {
+    function Material(color) {
+        this.color = color;
+    }
+    return Material;
 }());
 /********************* INTERNAL TYPES *************/
 // Pt2: two-dimensional point
@@ -162,7 +170,7 @@ var Vec3n = /** @class */ (function (_super) {
     __extends(Vec3n, _super);
     function Vec3n(x, y, z) {
         var _this = _super.call(this, x, y, z) || this;
-        var l = _this.length();
+        var l = Math.sqrt(x * x + y * y + z * z);
         if (l === 0) {
             return _this;
         }
@@ -221,26 +229,35 @@ function render(scene) {
     var vheight = scene.camera.viewport.h;
     var canvToViewport = new Pt2(vwidth / (2 * cwidth), vheight / (2 * cheight));
     var campos = scene.camera.position;
-    var sphere = scene.spheres[0];
     for (var y = -cheight / 2; y < cheight / 2; y++) {
         for (var x = -cwidth / 2; x < cwidth / 2; x++) {
             var c = new Pt2(x, y); // point on canvas
             var p = c.pmult(canvToViewport); // corresponding point on viewport
             var pvc = new Pt3(p.x - scene.camera.viewport.c.x, p.y - scene.camera.viewport.c.y, 0); // from viewport center to point
             var dir = scene.camera.direction.plus(pvc).normalize();
-            putPixel(c, castRay(new Ray(campos, dir), sphere));
+            var col = castRay(new Ray(campos, dir), scene.spheres, scene.bgcolor);
+            // if (y == 0 && x == cwidth/2 - 1) { console.log(p); console.log(dir); console.log(col); }
+            putPixel(c, col);
         }
     }
 }
-function castRay(ray, s) {
-    if (!s.intersects(ray)) {
-        return new Color(0.2, 0.7, 0.8); // background color
+function castRay(ray, spheres, bg) {
+    for (var _i = 0, spheres_1 = spheres; _i < spheres_1.length; _i++) {
+        var s = spheres_1[_i];
+        if (s.intersects(ray)) {
+            return s.material.color;
+        }
     }
-    return new Color(0.4, 0.4, 0.3); // sphere color
+    return bg; // return background color if no intersection found
 }
 /************* EXAMPLE CAMERA AND SCENE SETUP ***************/
-var camera = new Camera(new Pt3(0, 0, -1), new Vec3(0, 0, 1), 4, 4);
-var scene = new Scene(camera, [new Sphere(new Pt3(1, -1, 3), 2)]);
+var camera = new Camera(new Pt3(0, 0, -1), new Vec3(0, 0, 1), 3, 3);
+var red = new Material(new Color(1, 0, 0));
+var green = new Material(new Color(0, 1, 0));
+var scene = new Scene(camera, [new Sphere(new Pt3(-3, 0, 16), 2, red),
+    new Sphere(new Pt3(-1, -1.5, 12), 2, red),
+    new Sphere(new Pt3(1.5, 0.5, 18), 3, green),
+    new Sphere(new Pt3(7, 5, 18), 4, green)], new Color(0.2, 0.7, 0.8));
 /********************* ENTRY POINT **********************/
 function main() {
     render(scene);
