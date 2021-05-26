@@ -109,9 +109,13 @@ class Sphere {
 
 class Material {
     color : Color;
+    albedo : {diffuse : number, specular : number};
+    specExp : number;
 
-    constructor(color : Color) {
+    constructor(color : Color, albedo = null, specExp : number = 0) {
 	this.color = color;
+	this.albedo = albedo;
+	this.specExp = specExp;
 	return this;
     }
 }
@@ -231,6 +235,10 @@ class Vec3 {
 	return new Vec3n(this.x,this.y,this.z);
     }
 
+    reflect(n : Vec3n) : Vec3 {
+	return this.plus(n.scale(-2 * this.dot(n)));
+    }
+
     scale(r : number) : Vec3 {
 	return new Vec3(r * this.x, r * this.y, r * this.z);
     }
@@ -309,6 +317,10 @@ class Color {
     scale(i : number) {
 	return new Color(this.r * i, this.g * i, this.b * i);
     }
+
+    plus(c : Color) {
+	return new Color(this.r + c.r, this.g + c.g, this.b + c.b);
+    }
 }
 
 
@@ -338,7 +350,7 @@ function render(scene) {
 }
 
 
-
+let WHITE : Color = new Color(1,1,1);
 function castRay(ray : Ray, scene) : Color {
     let min_t : number = Infinity;
     let hit_sphere : Sphere = null;
@@ -353,26 +365,38 @@ function castRay(ray : Ray, scene) : Color {
 	return scene.bgcolor; // return background color if no intersection found
     } else {
 	let intersectionPoint : Pt3 = ray.o.translate(ray.d.scale(min_t));
-	let lightIntensityAtPoint : number = 0;
-	for (var l of scene.lights) {
-	    if (l.constructor.name === "AmbientLight") {
-		lightIntensityAtPoint += l.intensity;
-	    } else { // point light or directional light
-		let lightDirection : Vec3n = null;
-		if (l.constructor.name === "PointLight") {
-		    lightDirection = l.position.minus(intersectionPoint).normalize();
-		} else {
-		    lightDirection = l.direction;
-		}
-		let normalAtIntersection : Vec3n = intersectionPoint.minus(hit_sphere.c).normalize();
-		lightIntensityAtPoint += l.intensity * Math.max(0, lightDirection.dot(normalAtIntersection));
-	    }
-	}
-	return hit_sphere.material.color.scale(lightIntensityAtPoint);
+	
+	let lightsAtPoint : { diffuse : number, specular : number } = computeLights(intersectionPoint, scene.lights, hit_sphere, ray);
+	return hit_sphere.material.color.scale(lightsAtPoint.diffuse * hit_sphere.material.albedo.diffuse).plus(
+	    WHITE.scale(lightsAtPoint.specular * hit_sphere.material.albedo.specular));
     }
 
 }
-    
+// specular_light_intensity += powf(std::max(0.f, reflect(light_dir, N).dot(ray.d), material.specular_exponent)*lights[i].intensity;
+
+function computeLights(p : Pt3, lights, s : Sphere, ray : Ray) {
+    let diffuse : number = 0;
+    let specular : number = 0;
+    for (var l of lights) {
+	    if (l.constructor.name === "AmbientLight") {
+		diffuse += l.intensity;
+	    } else { // point light or directional light
+		let lightDirection : Vec3n = null;
+		if (l.constructor.name === "PointLight") {
+		    lightDirection = l.position.minus(p).normalize();
+		}
+		if (l.constructor.name === "DirectionalLight") {
+		    lightDirection = l.direction;
+		}
+		let N : Vec3n = p.minus(s.c).normalize();
+		diffuse += l.intensity * Math.max(0, lightDirection.dot(N));
+		
+		let specBase : number = Math.max(0, lightDirection.reflect(N).dot(ray.d));
+		specular += Math.pow(specBase, s.material.specExp) * l.intensity;
+	    }
+	}
+    return {diffuse, specular};
+}
 
 
 /************* EXAMPLE SCENE SETUP ***************/
@@ -405,9 +429,17 @@ let sceneGFS = {
 
 // scene from Tiny Raytracer tutorial
 // note: I changed the direction of camera to be positive, so z-coordinates are positive
+let ivory : Material = new Material(
+    new Color (0.4, 0.4, 0.3),
+    { diffuse : 0.6, specular : 0.3 },
+    50
+);
 
-let ivory : Material = new Material( new Color (0.4, 0.4, 0.3) );
-let red_rubber : Material = new Material( new Color (0.3, 0.1, 0.1) );
+let red_rubber : Material = new Material(
+    new Color (0.3, 0.1, 0.1),
+    { diffuse : 0.9, specular : 0.1 },
+    10
+);
 
 let sceneTR = {
     camera : new Camera(
@@ -422,14 +454,16 @@ let sceneTR = {
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
     lights: [
-	new PointLight(new Pt3(-20, 20,  -20), 1.5)
+	new PointLight(new Pt3(-20, 20,  -20), 1.5),
+	new PointLight(new Pt3(30, 50, 25), 1.8),
+	new PointLight(new Pt3(30, 20, -30), 1.7)
     ]
 };
 
 
 /********************* ENTRY POINT **********************/
 function main() {
-    render(sceneGFS);
+    render(sceneTR);
     updateCanvas();
 }
 

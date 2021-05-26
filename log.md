@@ -22,5 +22,6 @@
 
 * 12:51 - step 4 works! The calculation of the normal was indeed wrong: I was taking the ray direction but it needs to be the vector coming out of the hit sphere's origin to the intersection point. For testing, I went back to the more familiar scene from the graphics from scratch book.
 
+* 13:10 - a bit of refactoring, adding the scene from the tiny raytracer tutorial, improve the handling of camera zoom. I'm back to liking this. On to step 5.
 
 

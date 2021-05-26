@@ -104,8 +104,12 @@ var Sphere = /** @class */ (function () {
     return Sphere;
 }());
 var Material = /** @class */ (function () {
-    function Material(color) {
+    function Material(color, albedo, specExp) {
+        if (albedo === void 0) { albedo = null; }
+        if (specExp === void 0) { specExp = 0; }
         this.color = color;
+        this.albedo = albedo;
+        this.specExp = specExp;
         return this;
     }
     return Material;
@@ -204,6 +208,9 @@ var Vec3 = /** @class */ (function () {
     Vec3.prototype.normalize = function () {
         return new Vec3n(this.x, this.y, this.z);
     };
+    Vec3.prototype.reflect = function (n) {
+        return this.plus(n.scale(-2 * this.dot(n)));
+    };
     Vec3.prototype.scale = function (r) {
         return new Vec3(r * this.x, r * this.y, r * this.z);
     };
@@ -269,6 +276,9 @@ var Color = /** @class */ (function () {
     Color.prototype.scale = function (i) {
         return new Color(this.r * i, this.g * i, this.b * i);
     };
+    Color.prototype.plus = function (c) {
+        return new Color(this.r + c.r, this.g + c.g, this.b + c.b);
+    };
     return Color;
 }());
 /********************* RENDERING FUNCTION ***************/
@@ -291,6 +301,7 @@ function render(scene) {
         }
     }
 }
+var WHITE = new Color(1, 1, 1);
 function castRay(ray, scene) {
     var min_t = Infinity;
     var hit_sphere = null;
@@ -307,26 +318,34 @@ function castRay(ray, scene) {
     }
     else {
         var intersectionPoint = ray.o.translate(ray.d.scale(min_t));
-        var lightIntensityAtPoint = 0;
-        for (var _b = 0, _c = scene.lights; _b < _c.length; _b++) {
-            var l = _c[_b];
-            if (l.constructor.name === "AmbientLight") {
-                lightIntensityAtPoint += l.intensity;
-            }
-            else { // point light or directional light
-                var lightDirection = null;
-                if (l.constructor.name === "PointLight") {
-                    lightDirection = l.position.minus(intersectionPoint).normalize();
-                }
-                else {
-                    lightDirection = l.direction;
-                }
-                var normalAtIntersection = intersectionPoint.minus(hit_sphere.c).normalize();
-                lightIntensityAtPoint += l.intensity * Math.max(0, lightDirection.dot(normalAtIntersection));
-            }
-        }
-        return hit_sphere.material.color.scale(lightIntensityAtPoint);
+        var lightsAtPoint = computeLights(intersectionPoint, scene.lights, hit_sphere, ray);
+        return hit_sphere.material.color.scale(lightsAtPoint.diffuse * hit_sphere.material.albedo.diffuse).plus(WHITE.scale(lightsAtPoint.specular * hit_sphere.material.albedo.specular));
     }
+}
+// specular_light_intensity += powf(std::max(0.f, reflect(light_dir, N).dot(ray.d), material.specular_exponent)*lights[i].intensity;
+function computeLights(p, lights, s, ray) {
+    var diffuse = 0;
+    var specular = 0;
+    for (var _i = 0, lights_1 = lights; _i < lights_1.length; _i++) {
+        var l = lights_1[_i];
+        if (l.constructor.name === "AmbientLight") {
+            diffuse += l.intensity;
+        }
+        else { // point light or directional light
+            var lightDirection = null;
+            if (l.constructor.name === "PointLight") {
+                lightDirection = l.position.minus(p).normalize();
+            }
+            if (l.constructor.name === "DirectionalLight") {
+                lightDirection = l.direction;
+            }
+            var N = p.minus(s.c).normalize();
+            diffuse += l.intensity * Math.max(0, lightDirection.dot(N));
+            var specBase = Math.max(0, lightDirection.reflect(N).dot(ray.d));
+            specular += Math.pow(specBase, s.material.specExp) * l.intensity;
+        }
+    }
+    return { diffuse: diffuse, specular: specular };
 }
 /************* EXAMPLE SCENE SETUP ***************/
 var red = new Material(new Color(1, 0, 0));
@@ -351,8 +370,8 @@ var sceneGFS = {
 };
 // scene from Tiny Raytracer tutorial
 // note: I changed the direction of camera to be positive, so z-coordinates are positive
-var ivory = new Material(new Color(0.4, 0.4, 0.3));
-var red_rubber = new Material(new Color(0.3, 0.1, 0.1));
+var ivory = new Material(new Color(0.4, 0.4, 0.3), { diffuse: 0.6, specular: 0.3 }, 50);
+var red_rubber = new Material(new Color(0.3, 0.1, 0.1), { diffuse: 0.9, specular: 0.1 }, 10);
 var sceneTR = {
     camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1),
     spheres: [
@@ -363,12 +382,14 @@ var sceneTR = {
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
     lights: [
-        new PointLight(new Pt3(-20, 20, -20), 1.5)
+        new PointLight(new Pt3(-20, 20, -20), 1.5),
+        new PointLight(new Pt3(30, 50, 25), 1.8),
+        new PointLight(new Pt3(30, 20, -30), 1.7)
     ]
 };
 /********************* ENTRY POINT **********************/
 function main() {
-    render(sceneGFS);
+    render(sceneTR);
     updateCanvas();
 }
 main();
