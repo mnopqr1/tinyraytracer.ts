@@ -47,11 +47,11 @@ class Camera {
     direction : Vec3;
     viewport : Rectangle;
 
-    constructor(position, direction, vw, vh) {
+    constructor(position, direction, zoom) {
 	this.position = position;
 	this.direction = direction;
 	// given viewport width and height, position viewport in correct direction in front of camera
-	this.viewport = new Rectangle(position.translate(direction), direction, vw, vh);
+	this.viewport = new Rectangle(position.translate(direction), direction, zoom, zoom * canvas.height / canvas.width);
 	return this;
     }
 }
@@ -387,7 +387,6 @@ let sceneGFS = {
     camera : new Camera(
 	new Pt3(0,0,0),
 	new Vec3(0,0,1),
-	1,
 	1),
     spheres: [
 	new Sphere(new Pt3(0,-1,3), 1, red),
@@ -414,8 +413,7 @@ let sceneTR = {
     camera : new Camera(
 	new Pt3(0,0,0),
 	new Vec3(0,0,1),
-	1.2,
-	0.9),
+	1),
     spheres: [
 	new Sphere(new Pt3(-3,0,16), 2, ivory),
       new Sphere(new Pt3(-1,-1.5,12), 2, red_rubber),
@@ -431,7 +429,7 @@ let sceneTR = {
 
 /********************* ENTRY POINT **********************/
 function main() {
-    render(sceneTR);
+    render(sceneGFS);
     updateCanvas();
 }
 

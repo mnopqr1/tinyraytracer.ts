@@ -48,11 +48,11 @@ function updateCanvas() {
 }
 /******************** SCENE AND CAMERA *********************/
 var Camera = /** @class */ (function () {
-    function Camera(position, direction, vw, vh) {
+    function Camera(position, direction, zoom) {
         this.position = position;
         this.direction = direction;
         // given viewport width and height, position viewport in correct direction in front of camera
-        this.viewport = new Rectangle(position.translate(direction), direction, vw, vh);
+        this.viewport = new Rectangle(position.translate(direction), direction, zoom, zoom * canvas.height / canvas.width);
         return this;
     }
     return Camera;
@@ -335,7 +335,7 @@ var blue = new Material(new Color(0, 0, 1));
 var yellow = new Material(new Color(1, 1, 0));
 // scene from graphics from scratch book
 var sceneGFS = {
-    camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1, 1),
+    camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1),
     spheres: [
         new Sphere(new Pt3(0, -1, 3), 1, red),
         new Sphere(new Pt3(2, 0, 4), 1, blue),
@@ -354,7 +354,7 @@ var sceneGFS = {
 var ivory = new Material(new Color(0.4, 0.4, 0.3));
 var red_rubber = new Material(new Color(0.3, 0.1, 0.1));
 var sceneTR = {
-    camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1.2, 0.9),
+    camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1),
     spheres: [
         new Sphere(new Pt3(-3, 0, 16), 2, ivory),
         new Sphere(new Pt3(-1, -1.5, 12), 2, red_rubber),
@@ -368,7 +368,7 @@ var sceneTR = {
 };
 /********************* ENTRY POINT **********************/
 function main() {
-    render(sceneTR);
+    render(sceneGFS);
     updateCanvas();
 }
 main();
