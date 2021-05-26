@@ -86,8 +86,7 @@ class Sphere {
         let Ls : number = vPC.lengthsq();
 	if (b < 0) {             // is sphere center behind ray origin?
 	    if (Ls <= this.rsq) { // check if ray origin is inside the sphere
-		return false; // TODO for now we just don't draw the sphere if we're inside
-		
+		return false; // TODO for now we just don't draw the sphere if we're inside		
 	    } else {
 		return false;
 	    }
@@ -119,14 +118,37 @@ class Material {
 
 class Light {
     position : Pt3;
+    direction : Vec3n;
     intensity : number;
 
-    constructor(position : Pt3, intensity : number) {
+    constructor(position : Pt3, direction : Vec3n, intensity : number) {
 	this.position = position;
+	this.direction = direction;
 	this.intensity = intensity;
 	return this;
     }
 }
+
+class PointLight extends Light {
+    constructor(position : Pt3, intensity : number) {
+	super(position, null, intensity);
+	return this;
+    }
+}
+
+class AmbientLight extends Light {
+    constructor(intensity : number) {
+	super(null, null, intensity);
+	return this;
+    }
+}
+
+class DirectionalLight extends Light {
+    constructor(direction : Vec3n , intensity : number) {
+	super(null, direction, intensity);
+	return this;
+    }
+}   
 
 /********************* INTERNAL TYPES *************/
 // Pt2: two-dimensional point
@@ -297,7 +319,7 @@ function render(scene) {
     let cheight : number = canvas.height;
     let vwidth : number = scene.camera.viewport.w;
     let vheight : number = scene.camera.viewport.h;
-    let canvToViewport : Pt2 = new Pt2(vwidth / (2 * cwidth), vheight / (2 * cheight));
+    let canvToViewport : Pt2 = new Pt2(vwidth / (cwidth), vheight / (cheight));
 
     let campos : Pt3 = scene.camera.position;
    
@@ -331,12 +353,22 @@ function castRay(ray : Ray, scene) : Color {
 	return scene.bgcolor; // return background color if no intersection found
     } else {
 	let intersectionPoint : Pt3 = ray.o.translate(ray.d.scale(min_t));
-	let diffuseLightIntensity : number = 0;
+	let lightIntensityAtPoint : number = 0;
 	for (var l of scene.lights) {
-	    let lightDirection : Vec3n = l.position.minus(intersectionPoint).normalize();
-	    diffuseLightIntensity += l.intensity * Math.max(0, -lightDirection.dot(ray.d));
+	    if (l.constructor.name === "AmbientLight") {
+		lightIntensityAtPoint += l.intensity;
+	    } else { // point light or directional light
+		let lightDirection : Vec3n = null;
+		if (l.constructor.name === "PointLight") {
+		    lightDirection = l.position.minus(intersectionPoint).normalize();
+		} else {
+		    lightDirection = l.direction;
+		}
+		let normalAtIntersection : Vec3n = intersectionPoint.minus(hit_sphere.c).normalize();
+		lightIntensityAtPoint += l.intensity * Math.max(0, lightDirection.dot(normalAtIntersection));
+	    }
 	}
-	return hit_sphere.material.color.scale(diffuseLightIntensity);
+	return hit_sphere.material.color.scale(lightIntensityAtPoint);
     }
 
 }
@@ -345,27 +377,37 @@ function castRay(ray : Ray, scene) : Color {
 
 /************* EXAMPLE CAMERA AND SCENE SETUP ***************/
 let camera : Camera = new Camera(
-    new Pt3(0,0,-1),
+    new Pt3(0,0,0),
     new Vec3(0,0,1),
-    3,
-    3
+    1,
+    1
 );
 
-let red : Material = new Material( new Color(1,0,0) );
+let red : Material = new Material( new Color(1, 0, 0) );
 let green : Material = new Material( new Color(0, 1, 0) );
+let blue : Material = new Material( new Color(0, 0, 1) );
+let yellow : Material = new Material ( new Color(1, 1, 0) );
 
 let scene = {
     camera,
     spheres: [
-	new Sphere(new Pt3(-3,0,11), 2, red),
-        new Sphere(new Pt3(-1,-1.5,12), 2, red),
-        new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
-	new Sphere(new Pt3(7, 5, 11), 4, green),
+	new Sphere(new Pt3(0,-1,3), 1, red),
+	new Sphere(new Pt3(2,0,4), 1, blue),
+	new Sphere(new Pt3(-2,0,4), 1, green),
+	new Sphere(new Pt3(0, -5001, 0), 5000, yellow)
+//	new Sphere(new Pt3(-3,0,11), 2, red),
+//      new Sphere(new Pt3(-1,-1.5,12), 2, red),
+//      new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
+//	new Sphere(new Pt3(7, 5, 11), 4, green),
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
-    lights: [new Light(new Pt3(0, 4, 11), 1),
-	     new Light(new Pt3(-4, 0, 10), 1)]
+    lights: [
+	new PointLight(new Pt3(2, 1, 0), 0.6),
+	new AmbientLight(0.2),
+	new DirectionalLight(new Vec3n(1,4,4), 0.2)
+    ]
 };
+
 
 /********************* ENTRY POINT **********************/
 function main() {

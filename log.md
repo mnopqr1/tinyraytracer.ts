@@ -1,5 +1,6 @@
-# A log of writing a raytracer on a train
+# A log of writing a raytracer on trains
 
+## 22 May 2021, Nice - Paris
 * 09:53 - train departure from Nice. Actually still writing an unrelated e-mail.
 
 * 10:33 - decided to go with the tiny ray tracer of ssloy. Porting putPixel and canvas from the Gambetta book.
@@ -15,3 +16,11 @@
 * 14:10 - After a lot of thinking and experimenting, saw that non-centered spheres actually also shows up as an ellipse in the tutorial code, so maybe it's ok. Will now check with reference scene from tutorial to check that pictures match.
 
 * 15:44 - Pictures matched, there is some light, but something is wrong with the sign of the direction in the calculation of the normal. Arriving in Paris.
+
+## 26 May, Paris - Amsterdam
+* 12:18 - train will leave from Paris in 4 minutes. Starting to look at the lighting code again.
+
+* 12:51 - step 4 works! The calculation of the normal was indeed wrong: I was taking the ray direction but it needs to be the vector coming out of the hit sphere's origin to the intersection point. For testing, I went back to the more familiar scene from the graphics from scratch book.
+
+
+

@@ -77,7 +77,7 @@ var Sphere = /** @class */ (function () {
         var Ls = vPC.lengthsq();
         if (b < 0) { // is sphere center behind ray origin?
             if (Ls <= this.rsq) { // check if ray origin is inside the sphere
-                return false; // TODO for now we just don't draw the sphere if we're inside
+                return false; // TODO for now we just don't draw the sphere if we're inside		
             }
             else {
                 return false;
@@ -111,13 +111,38 @@ var Material = /** @class */ (function () {
     return Material;
 }());
 var Light = /** @class */ (function () {
-    function Light(position, intensity) {
+    function Light(position, direction, intensity) {
         this.position = position;
+        this.direction = direction;
         this.intensity = intensity;
         return this;
     }
     return Light;
 }());
+var PointLight = /** @class */ (function (_super) {
+    __extends(PointLight, _super);
+    function PointLight(position, intensity) {
+        var _this = _super.call(this, position, null, intensity) || this;
+        return _this;
+    }
+    return PointLight;
+}(Light));
+var AmbientLight = /** @class */ (function (_super) {
+    __extends(AmbientLight, _super);
+    function AmbientLight(intensity) {
+        var _this = _super.call(this, null, null, intensity) || this;
+        return _this;
+    }
+    return AmbientLight;
+}(Light));
+var DirectionalLight = /** @class */ (function (_super) {
+    __extends(DirectionalLight, _super);
+    function DirectionalLight(direction, intensity) {
+        var _this = _super.call(this, null, direction, intensity) || this;
+        return _this;
+    }
+    return DirectionalLight;
+}(Light));
 /********************* INTERNAL TYPES *************/
 // Pt2: two-dimensional point
 // Pt3: three-dimensional point
@@ -252,7 +277,7 @@ function render(scene) {
     var cheight = canvas.height;
     var vwidth = scene.camera.viewport.w;
     var vheight = scene.camera.viewport.h;
-    var canvToViewport = new Pt2(vwidth / (2 * cwidth), vheight / (2 * cheight));
+    var canvToViewport = new Pt2(vwidth / (cwidth), vheight / (cheight));
     var campos = scene.camera.position;
     for (var y = -cheight / 2; y < cheight / 2; y++) {
         for (var x = -cwidth / 2; x < cwidth / 2; x++) {
@@ -282,30 +307,51 @@ function castRay(ray, scene) {
     }
     else {
         var intersectionPoint = ray.o.translate(ray.d.scale(min_t));
-        var diffuseLightIntensity = 0;
+        var lightIntensityAtPoint = 0;
         for (var _b = 0, _c = scene.lights; _b < _c.length; _b++) {
             var l = _c[_b];
-            var lightDirection = l.position.minus(intersectionPoint).normalize();
-            diffuseLightIntensity += l.intensity * Math.max(0, -lightDirection.dot(ray.d));
+            if (l.constructor.name === "AmbientLight") {
+                lightIntensityAtPoint += l.intensity;
+            }
+            else { // point light or directional light
+                var lightDirection = null;
+                if (l.constructor.name === "PointLight") {
+                    lightDirection = l.position.minus(intersectionPoint).normalize();
+                }
+                else {
+                    lightDirection = l.direction;
+                }
+                var normalAtIntersection = intersectionPoint.minus(hit_sphere.c).normalize();
+                lightIntensityAtPoint += l.intensity * Math.max(0, lightDirection.dot(normalAtIntersection));
+            }
         }
-        return hit_sphere.material.color.scale(diffuseLightIntensity);
+        return hit_sphere.material.color.scale(lightIntensityAtPoint);
     }
 }
 /************* EXAMPLE CAMERA AND SCENE SETUP ***************/
-var camera = new Camera(new Pt3(0, 0, -1), new Vec3(0, 0, 1), 3, 3);
+var camera = new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1, 1);
 var red = new Material(new Color(1, 0, 0));
 var green = new Material(new Color(0, 1, 0));
+var blue = new Material(new Color(0, 0, 1));
+var yellow = new Material(new Color(1, 1, 0));
 var scene = {
     camera: camera,
     spheres: [
-        new Sphere(new Pt3(-3, 0, 11), 2, red),
-        new Sphere(new Pt3(-1, -1.5, 12), 2, red),
-        new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
-        new Sphere(new Pt3(7, 5, 11), 4, green),
+        new Sphere(new Pt3(0, -1, 3), 1, red),
+        new Sphere(new Pt3(2, 0, 4), 1, blue),
+        new Sphere(new Pt3(-2, 0, 4), 1, green),
+        new Sphere(new Pt3(0, -5001, 0), 5000, yellow)
+        //	new Sphere(new Pt3(-3,0,11), 2, red),
+        //      new Sphere(new Pt3(-1,-1.5,12), 2, red),
+        //      new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
+        //	new Sphere(new Pt3(7, 5, 11), 4, green),
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
-    lights: [new Light(new Pt3(0, 4, 11), 1),
-        new Light(new Pt3(-4, 0, 10), 1)]
+    lights: [
+        new PointLight(new Pt3(2, 1, 0), 0.6),
+        new AmbientLight(0.2),
+        new DirectionalLight(new Vec3n(1, 4, 4), 0.2)
+    ]
 };
 /********************* ENTRY POINT **********************/
 function main() {
