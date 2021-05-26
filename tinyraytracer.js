@@ -328,23 +328,19 @@ function castRay(ray, scene) {
         return hit_sphere.material.color.scale(lightIntensityAtPoint);
     }
 }
-/************* EXAMPLE CAMERA AND SCENE SETUP ***************/
-var camera = new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1, 1);
+/************* EXAMPLE SCENE SETUP ***************/
 var red = new Material(new Color(1, 0, 0));
 var green = new Material(new Color(0, 1, 0));
 var blue = new Material(new Color(0, 0, 1));
 var yellow = new Material(new Color(1, 1, 0));
-var scene = {
-    camera: camera,
+// scene from graphics from scratch book
+var sceneGFS = {
+    camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1, 1),
     spheres: [
         new Sphere(new Pt3(0, -1, 3), 1, red),
         new Sphere(new Pt3(2, 0, 4), 1, blue),
         new Sphere(new Pt3(-2, 0, 4), 1, green),
         new Sphere(new Pt3(0, -5001, 0), 5000, yellow)
-        //	new Sphere(new Pt3(-3,0,11), 2, red),
-        //      new Sphere(new Pt3(-1,-1.5,12), 2, red),
-        //      new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
-        //	new Sphere(new Pt3(7, 5, 11), 4, green),
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
     lights: [
@@ -353,9 +349,26 @@ var scene = {
         new DirectionalLight(new Vec3n(1, 4, 4), 0.2)
     ]
 };
+// scene from Tiny Raytracer tutorial
+// note: I changed the direction of camera to be positive, so z-coordinates are positive
+var ivory = new Material(new Color(0.4, 0.4, 0.3));
+var red_rubber = new Material(new Color(0.3, 0.1, 0.1));
+var sceneTR = {
+    camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1.2, 0.9),
+    spheres: [
+        new Sphere(new Pt3(-3, 0, 16), 2, ivory),
+        new Sphere(new Pt3(-1, -1.5, 12), 2, red_rubber),
+        new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
+        new Sphere(new Pt3(7, 5, 18), 4, ivory),
+    ],
+    bgcolor: new Color(0.2, 0.7, 0.8),
+    lights: [
+        new PointLight(new Pt3(-20, 20, -20), 1.5)
+    ]
+};
 /********************* ENTRY POINT **********************/
 function main() {
-    render(scene);
+    render(sceneTR);
     updateCanvas();
 }
 main();

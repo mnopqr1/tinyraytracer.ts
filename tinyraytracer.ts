@@ -375,30 +375,25 @@ function castRay(ray : Ray, scene) : Color {
     
 
 
-/************* EXAMPLE CAMERA AND SCENE SETUP ***************/
-let camera : Camera = new Camera(
-    new Pt3(0,0,0),
-    new Vec3(0,0,1),
-    1,
-    1
-);
+/************* EXAMPLE SCENE SETUP ***************/
 
 let red : Material = new Material( new Color(1, 0, 0) );
 let green : Material = new Material( new Color(0, 1, 0) );
 let blue : Material = new Material( new Color(0, 0, 1) );
 let yellow : Material = new Material ( new Color(1, 1, 0) );
 
-let scene = {
-    camera,
+// scene from graphics from scratch book
+let sceneGFS = {
+    camera : new Camera(
+	new Pt3(0,0,0),
+	new Vec3(0,0,1),
+	1,
+	1),
     spheres: [
 	new Sphere(new Pt3(0,-1,3), 1, red),
 	new Sphere(new Pt3(2,0,4), 1, blue),
 	new Sphere(new Pt3(-2,0,4), 1, green),
 	new Sphere(new Pt3(0, -5001, 0), 5000, yellow)
-//	new Sphere(new Pt3(-3,0,11), 2, red),
-//      new Sphere(new Pt3(-1,-1.5,12), 2, red),
-//      new Sphere(new Pt3(1.5, 0.5, 11), 3, green),
-//	new Sphere(new Pt3(7, 5, 11), 4, green),
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
     lights: [
@@ -409,9 +404,34 @@ let scene = {
 };
 
 
+// scene from Tiny Raytracer tutorial
+// note: I changed the direction of camera to be positive, so z-coordinates are positive
+
+let ivory : Material = new Material( new Color (0.4, 0.4, 0.3) );
+let red_rubber : Material = new Material( new Color (0.3, 0.1, 0.1) );
+
+let sceneTR = {
+    camera : new Camera(
+	new Pt3(0,0,0),
+	new Vec3(0,0,1),
+	1.2,
+	0.9),
+    spheres: [
+	new Sphere(new Pt3(-3,0,16), 2, ivory),
+      new Sphere(new Pt3(-1,-1.5,12), 2, red_rubber),
+      new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
+	new Sphere(new Pt3(7, 5, 18), 4, ivory),
+    ],
+    bgcolor: new Color(0.2, 0.7, 0.8),
+    lights: [
+	new PointLight(new Pt3(-20, 20,  -20), 1.5)
+    ]
+};
+
+
 /********************* ENTRY POINT **********************/
 function main() {
-    render(scene);
+    render(sceneTR);
     updateCanvas();
 }
 
