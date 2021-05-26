@@ -78,21 +78,21 @@ class Sphere {
     }
 
     // checks for intersection between sphere and ray
-    // returns either the smallest t such that ray.o + t * ray.d is on the sphere, or false if none such exists
-    intersection(ray : Ray) : (number | boolean) {
+    // returns either the smallest t such that ray.o + t * ray.d is on the sphere, or null if none such exists
+    intersection(ray : Ray) : number {
 	
 	let vPC : Vec3 = this.c.minus(ray.o); // from ray origin to sphere center
 	let b : number = vPC.dot(ray.d);      // time b such that ray.o + t * ray.d is the projection of this.c onto the ray
         let Ls : number = vPC.lengthsq();
 	if (b < 0) {             // is sphere center behind ray origin?
 	    if (Ls <= this.rsq) { // check if ray origin is inside the sphere
-		return false; // TODO for now we just don't draw the sphere if we're inside		
+		return null; // TODO for now we just don't draw the sphere if we're inside		
 	    } else {
-		return false;
+		return null;
 	    }
 	} else {
 	    let D : number = b * b + this.rsq - Ls; // discriminant = b^2 + r^2 - L^2
-	    if (D < 0) { return false; }
+	    if (D < 0) { return null; }
 	    else { 
 		let sqD : number = Math.sqrt(D);
 		let t1 : number = b - sqD;
@@ -107,12 +107,15 @@ class Sphere {
     }
 }
 
+
+let standard_albedo = {diffuse : 1, specular : 1, reflection : 0};
+let standard_specexp : number = 50;
 class Material {
     color : Color;
-    albedo : {diffuse : number, specular : number};
+    albedo : {diffuse : number, specular : number, reflection : number};
     specExp : number;
 
-    constructor(color : Color, albedo = null, specExp : number = 0) {
+    constructor(color : Color, albedo = standard_albedo, specExp : number = standard_specexp) {
 	this.color = color;
 	this.albedo = albedo;
 	this.specExp = specExp;
@@ -342,7 +345,7 @@ function render(scene) {
 	    let p = c.pmult(canvToViewport); // corresponding point on viewport
 	    let pvc = new Pt3(p.x - scene.camera.viewport.c.x, p.y - scene.camera.viewport.c.y, 0); // from viewport center to point
 	    let dir : Vec3n = scene.camera.direction.plus(pvc).normalize();
-	    let col : Color = castRay(new Ray(campos, dir), scene);
+	    let col : Color = castRay(new Ray(campos, dir), scene, scene.reflection_depth);
 	    // if (y == 0 && x == cwidth/2 - 1) { console.log(p); console.log(dir); console.log(col); }
 	    putPixel(c, col);
 	}
@@ -351,51 +354,100 @@ function render(scene) {
 
 
 let WHITE : Color = new Color(1,1,1);
-function castRay(ray : Ray, scene) : Color {
+
+function castRay(ray : Ray, scene, depth : number = 0) : Color {
+    // end recursion
+    if (depth < 0) {
+	return scene.bgcolor;
+    }
+    
     let min_t : number = Infinity;
-    let hit_sphere : Sphere = null;
-    for (var s of scene.spheres) {
-	let t = s.intersection(ray);
+    let hit_sphere_id : number = null;
+    for (let i = 0; i < scene.spheres.length; i++) {
+	let t = scene.spheres[i].intersection(ray);
 	if (t && t < min_t) {
 	    min_t = t;
-	    hit_sphere = s;
+	    hit_sphere_id = i;
 	}
     }
-    if (hit_sphere === null) {
+    if (hit_sphere_id === null) {
 	return scene.bgcolor; // return background color if no intersection found
-    } else {
-	let intersectionPoint : Pt3 = ray.o.translate(ray.d.scale(min_t));
-	
-	let lightsAtPoint : { diffuse : number, specular : number } = computeLights(intersectionPoint, scene.lights, hit_sphere, ray);
-	return hit_sphere.material.color.scale(lightsAtPoint.diffuse * hit_sphere.material.albedo.diffuse).plus(
-	    WHITE.scale(lightsAtPoint.specular * hit_sphere.material.albedo.specular));
-    }
+    } 
+    let intersectionPoint : Pt3 = ray.o.translate(ray.d.scale(min_t));
+    
+    let lightsAtPoint : { diffuse : number, specular : number, reflect : Color } = computeLights(intersectionPoint, scene, hit_sphere_id, ray, depth);
+
+    let hit_sphere : Sphere = scene.spheres[hit_sphere_id];
+    // console.log(hit_sphere);
+    // console.log(lightsAtPoint);
+    // console.log(    hit_sphere.material.color.scale(lightsAtPoint.diffuse * hit_sphere.material.albedo.diffuse).plus( WHITE.scale(lightsAtPoint.specular * hit_sphere.material.albedo.specular)));
+    return hit_sphere.material.color.scale(lightsAtPoint.diffuse * hit_sphere.material.albedo.diffuse).plus(WHITE.scale(lightsAtPoint.specular * hit_sphere.material.albedo.specular)).plus(	    lightsAtPoint.reflect.scale(hit_sphere.material.albedo.reflection));
 
 }
-// specular_light_intensity += powf(std::max(0.f, reflect(light_dir, N).dot(ray.d), material.specular_exponent)*lights[i].intensity;
 
-function computeLights(p : Pt3, lights, s : Sphere, ray : Ray) {
+
+function intersectsWithin(ray : Ray, t_min : number, t_max : number, spheres : Sphere[], si : number) : boolean {
+    for (let i = 0; i < spheres.length; i++) {
+	if (i === si) { continue; }
+	let t = spheres[i].intersection(ray);
+	if (t && Math.abs(t_min) < Math.abs(t) && Math.abs(t) < Math.abs(t_max)) {
+		return true;
+	}
+    }
+    return false;
+}
+
+
+
+function computeLights(p : Pt3, scene, si : number, ray : Ray, depth : number) {
     let diffuse : number = 0;
     let specular : number = 0;
-    for (var l of lights) {
+    let s : Sphere = scene.spheres[si];
+    let N : Vec3n = p.minus(s.c).normalize();
+    
+    for (var l of scene.lights) {
 	    if (l.constructor.name === "AmbientLight") {
 		diffuse += l.intensity;
 	    } else { // point light or directional light
 		let lightDirection : Vec3n = null;
+		let t_max : number = null;
+		
 		if (l.constructor.name === "PointLight") {
 		    lightDirection = l.position.minus(p).normalize();
+		    t_max = Math.sqrt(l.position.distancesq(p));
 		}
+		
 		if (l.constructor.name === "DirectionalLight") {
 		    lightDirection = l.direction;
+		    t_max = Infinity;
 		}
-		let N : Vec3n = p.minus(s.c).normalize();
+
+              	let lightRay : Ray = new Ray(p, lightDirection);
+		
+
+		let LN : number = lightDirection.dot(N);
+
+  		// shadow check: does this light ray hit any other sphere before hitting s?
+		let t_min : number = LN > 0 ? 0.001 : -0.001; // don't consider the sphere itself when checking for intersections
+		if (intersectsWithin(lightRay, t_min, t_max, scene.spheres, si)) { continue; }
+
+
 		diffuse += l.intensity * Math.max(0, lightDirection.dot(N));
 		
 		let specBase : number = Math.max(0, lightDirection.reflect(N).dot(ray.d));
 		specular += Math.pow(specBase, s.material.specExp) * l.intensity;
 	    }
-	}
-    return {diffuse, specular};
+    }
+
+    // compute reflected color
+
+    let reflectDir : Vec3n = ray.d.reflect(N);
+    let offsetFactor : number = ray.d.dot(N) < 0 ? -0.001 : 0.001 // avoid reflecting sphere in itself
+    let reflectOrigin : Pt3 = p.translate(reflectDir.scale(offsetFactor));
+    let reflectRay = new Ray(reflectOrigin, reflectDir);
+    let reflect : Color = castRay(reflectRay, scene, depth - 1);
+
+    return {diffuse, specular, reflect};
 }
 
 
@@ -411,7 +463,7 @@ let sceneGFS = {
     camera : new Camera(
 	new Pt3(0,0,0),
 	new Vec3(0,0,1),
-	1),
+	1.4),
     spheres: [
 	new Sphere(new Pt3(0,-1,3), 1, red),
 	new Sphere(new Pt3(2,0,4), 1, blue),
@@ -423,7 +475,8 @@ let sceneGFS = {
 	new PointLight(new Pt3(2, 1, 0), 0.6),
 	new AmbientLight(0.2),
 	new DirectionalLight(new Vec3n(1,4,4), 0.2)
-    ]
+    ],
+    reflection_depth: 0
 };
 
 
@@ -431,15 +484,23 @@ let sceneGFS = {
 // note: I changed the direction of camera to be positive, so z-coordinates are positive
 let ivory : Material = new Material(
     new Color (0.4, 0.4, 0.3),
-    { diffuse : 0.6, specular : 0.3 },
+    { diffuse : 0.6, specular : 0.3, reflection : 0.1 },
     50
 );
 
 let red_rubber : Material = new Material(
     new Color (0.3, 0.1, 0.1),
-    { diffuse : 0.9, specular : 0.1 },
+    { diffuse : 0.9, specular : 0.1, reflection : 0 },
     10
 );
+
+let mirror : Material = new Material (
+    new Color(1, 1, 1),
+    { diffuse : 0, specular : 10, reflection : 0.8 },
+    1425
+);
+
+
 
 let sceneTR = {
     camera : new Camera(
@@ -448,16 +509,17 @@ let sceneTR = {
 	1),
     spheres: [
 	new Sphere(new Pt3(-3,0,16), 2, ivory),
-      new Sphere(new Pt3(-1,-1.5,12), 2, red_rubber),
-      new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
-	new Sphere(new Pt3(7, 5, 18), 4, ivory),
+	new Sphere(new Pt3(-1, -1.5, 12), 2, mirror),
+	new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
+	new Sphere(new Pt3(7, 5, 18), 4, mirror),
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
     lights: [
 	new PointLight(new Pt3(-20, 20,  -20), 1.5),
 	new PointLight(new Pt3(30, 50, 25), 1.8),
 	new PointLight(new Pt3(30, 20, -30), 1.7)
-    ]
+    ],
+    reflection_depth: 3
 };
 
 

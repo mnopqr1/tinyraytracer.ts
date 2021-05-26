@@ -24,4 +24,8 @@
 
 * 13:10 - a bit of refactoring, adding the scene from the tiny raytracer tutorial, improve the handling of camera zoom. I'm back to liking this. On to step 5.
 
+* 13:40 - specular light, understood the idea of "albedo" and refactored to compute lighting in separate function. Train is in Brussels.
 
+* 14:31 - shadows! and we made it to antwerp. wrestled a bit with the tmin and tmax and how to make it work with directional light, but got it to work.
+
+* 15:05 - reflections! but this is also the first time rendering starts to become a bit slow. Train in Rotterdam.
