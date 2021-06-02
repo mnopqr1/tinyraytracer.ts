@@ -29,3 +29,10 @@
 * 14:31 - shadows! and we made it to antwerp. wrestled a bit with the tmin and tmax and how to make it work with directional light, but got it to work.
 
 * 15:05 - reflections! but this is also the first time rendering starts to become a bit slow. Train in Rotterdam.
+
+## 2 June, Amsterdam - Paris
+* 15:39 - train left Amsterdam 24 minutes ago, I was writing something else, starting to look at where I was with the code.
+
+* 17:19 - can't get refractions to work. There was a TODO in the ray sphere intersection that broke it but even after I fixed that it isn't working (in fact "fixing" that intersection code broke the reflections!). going to look at c++ reference code.
+
+* 18:11 - finally, refractions are working!!! I decided to go for a major refactoring of the code following the C++ reference code. In particular I cleaned up the code for intersections considerable, I bet the bug was there. 

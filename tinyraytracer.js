@@ -72,46 +72,36 @@ var Sphere = /** @class */ (function () {
     // checks for intersection between sphere and ray
     // returns either the smallest t such that ray.o + t * ray.d is on the sphere, or null if none such exists
     Sphere.prototype.intersection = function (ray) {
-        var vPC = this.c.minus(ray.o); // from ray origin to sphere center
-        var b = vPC.dot(ray.d); // time b such that ray.o + t * ray.d is the projection of this.c onto the ray
-        var Ls = vPC.lengthsq();
-        if (b < 0) { // is sphere center behind ray origin?
-            if (Ls <= this.rsq) { // check if ray origin is inside the sphere
-                return null; // TODO for now we just don't draw the sphere if we're inside		
-            }
-            else {
-                return null;
-            }
+        var L = this.c.minus(ray.o);
+        var tca = L.dot(ray.d); // time such that ray.o + t * ray.d is the projection of this.c onto the ray
+        var d2 = L.dot(L) - tca * tca;
+        if (d2 > this.rsq)
+            return null;
+        var thc = Math.sqrt(this.rsq - d2);
+        var t0 = tca - thc;
+        var t1 = tca + thc;
+        if (t0 < 0.001) {
+            t0 = t1;
         }
-        else {
-            var D = b * b + this.rsq - Ls; // discriminant = b^2 + r^2 - L^2
-            if (D < 0) {
-                return null;
-            }
-            else {
-                var sqD = Math.sqrt(D);
-                var t1 = b - sqD;
-                var t2 = b + sqD;
-                if (ray.atTime(t1).distancesq(ray.o) < ray.atTime(t2).distancesq(ray.o)) {
-                    return t1;
-                }
-                else {
-                    return t2;
-                }
-            }
+        if (t1 < 0.001) {
+            return null;
         }
+        return t0;
     };
     return Sphere;
 }());
-var standard_albedo = { diffuse: 1, specular: 1, reflection: 0 };
-var standard_specexp = 50;
+var standardAlbedo = { diffuse: 1, specular: 1, reflection: 0, refraction: 0 };
+var standardSpecexp = 50;
+var standardRefrind = 1.0;
 var Material = /** @class */ (function () {
-    function Material(color, albedo, specExp) {
-        if (albedo === void 0) { albedo = standard_albedo; }
-        if (specExp === void 0) { specExp = standard_specexp; }
+    function Material(color, albedo, specExp, refrInd) {
+        if (albedo === void 0) { albedo = standardAlbedo; }
+        if (specExp === void 0) { specExp = standardSpecexp; }
+        if (refrInd === void 0) { refrInd = standardRefrind; }
         this.color = color;
         this.albedo = albedo;
         this.specExp = specExp;
+        this.refrInd = refrInd;
         return this;
     }
     return Material;
@@ -213,6 +203,19 @@ var Vec3 = /** @class */ (function () {
     Vec3.prototype.reflect = function (n) {
         return this.plus(n.scale(-2 * this.dot(n)));
     };
+    Vec3.prototype.refract = function (n, etaOut, etaIn) {
+        if (etaIn === void 0) { etaIn = 1; }
+        var cosIn = -1 * Math.max(-1, Math.min(this.dot(n), 1));
+        if (cosIn < 0) {
+            return this.refract(n.scale(-1), etaIn, etaOut);
+        }
+        ;
+        var eta = etaIn / etaOut;
+        var cosOutSquared = 1 - eta * eta * (1 - cosIn * cosIn);
+        return cosOutSquared < 0 ?
+            new Vec3n(1, 0, 0) :
+            this.scale(eta).plus(n.scale(eta * cosIn - Math.sqrt(cosOutSquared))).normalize();
+    };
     Vec3.prototype.scale = function (r) {
         return new Vec3(r * this.x, r * this.y, r * this.z);
     };
@@ -310,43 +313,38 @@ function castRay(ray, scene, depth) {
     if (depth < 0) {
         return scene.bgcolor;
     }
-    var min_t = Infinity;
-    var hit_sphere_id = null;
-    for (var i = 0; i < scene.spheres.length; i++) {
-        var t = scene.spheres[i].intersection(ray);
-        if (t && t < min_t) {
-            min_t = t;
-            hit_sphere_id = i;
-        }
-    }
-    if (hit_sphere_id === null) {
+    var hit = scene_intersect(ray, scene);
+    if (hit == null) {
         return scene.bgcolor; // return background color if no intersection found
     }
-    var intersectionPoint = ray.o.translate(ray.d.scale(min_t));
-    var lightsAtPoint = computeLights(intersectionPoint, scene, hit_sphere_id, ray, depth);
-    var hit_sphere = scene.spheres[hit_sphere_id];
-    // console.log(hit_sphere);
-    // console.log(lightsAtPoint);
-    // console.log(    hit_sphere.material.color.scale(lightsAtPoint.diffuse * hit_sphere.material.albedo.diffuse).plus( WHITE.scale(lightsAtPoint.specular * hit_sphere.material.albedo.specular)));
-    return hit_sphere.material.color.scale(lightsAtPoint.diffuse * hit_sphere.material.albedo.diffuse).plus(WHITE.scale(lightsAtPoint.specular * hit_sphere.material.albedo.specular)).plus(lightsAtPoint.reflect.scale(hit_sphere.material.albedo.reflection));
+    var lightsAtPoint = computeLights(hit, scene, ray, depth);
+    return hit.material.color.scale(lightsAtPoint.diffuse * hit.material.albedo.diffuse).plus(WHITE.scale(lightsAtPoint.specular * hit.material.albedo.specular)).plus(lightsAtPoint.reflect.scale(hit.material.albedo.reflection)).plus(lightsAtPoint.refract.scale(hit.material.albedo.refraction));
 }
-function intersectsWithin(ray, t_min, t_max, spheres, si) {
-    for (var i = 0; i < spheres.length; i++) {
-        if (i === si) {
-            continue;
-        }
-        var t = spheres[i].intersection(ray);
-        if (t && Math.abs(t_min) < Math.abs(t) && Math.abs(t) < Math.abs(t_max)) {
-            return true;
+function scene_intersect(ray, scene) {
+    var tMin = Infinity;
+    var hitSphere = null;
+    for (var i = 0; i < scene.spheres.length; i++) {
+        var s = scene.spheres[i];
+        var t = s.intersection(ray);
+        if (t && t < tMin) {
+            tMin = t;
+            hitSphere = s;
         }
     }
-    return false;
+    if (!hitSphere)
+        return null;
+    else {
+        var hitPoint = ray.o.translate(ray.d.scale(tMin));
+        return {
+            p: hitPoint,
+            N: hitPoint.minus(hitSphere.c).normalize(),
+            material: hitSphere.material
+        };
+    }
 }
-function computeLights(p, scene, si, ray, depth) {
+function computeLights(hit, scene, ray, depth) {
     var diffuse = 0;
     var specular = 0;
-    var s = scene.spheres[si];
-    var N = p.minus(s.c).normalize();
     for (var _i = 0, _a = scene.lights; _i < _a.length; _i++) {
         var l = _a[_i];
         if (l.constructor.name === "AmbientLight") {
@@ -356,32 +354,31 @@ function computeLights(p, scene, si, ray, depth) {
             var lightDirection = null;
             var t_max = null;
             if (l.constructor.name === "PointLight") {
-                lightDirection = l.position.minus(p).normalize();
-                t_max = Math.sqrt(l.position.distancesq(p));
+                lightDirection = l.position.minus(hit.p).normalize();
+                t_max = Math.sqrt(l.position.distancesq(hit.p));
             }
             if (l.constructor.name === "DirectionalLight") {
                 lightDirection = l.direction;
                 t_max = Infinity;
             }
-            var lightRay = new Ray(p, lightDirection);
-            var LN = lightDirection.dot(N);
+            var lightRay = new Ray(l.position, lightDirection);
             // shadow check: does this light ray hit any other sphere before hitting s?
-            var t_min = LN > 0 ? 0.001 : -0.001; // don't consider the sphere itself when checking for intersections
-            if (intersectsWithin(lightRay, t_min, t_max, scene.spheres, si)) {
+            var lightHit = scene_intersect(lightRay, scene);
+            if (lightHit && lightHit.p.distancesq(hit.p) < l.position.distancesq(hit.p)) {
                 continue;
             }
-            diffuse += l.intensity * Math.max(0, lightDirection.dot(N));
-            var specBase = Math.max(0, lightDirection.reflect(N).dot(ray.d));
-            specular += Math.pow(specBase, s.material.specExp) * l.intensity;
+            diffuse += l.intensity * Math.max(0, lightDirection.dot(hit.N));
+            var specBase = Math.max(0, lightDirection.reflect(hit.N).dot(ray.d));
+            specular += Math.pow(specBase, hit.material.specExp) * l.intensity;
         }
     }
     // compute reflected color
-    var reflectDir = ray.d.reflect(N);
-    var offsetFactor = ray.d.dot(N) < 0 ? -0.001 : 0.001; // avoid reflecting sphere in itself
-    var reflectOrigin = p.translate(reflectDir.scale(offsetFactor));
-    var reflectRay = new Ray(reflectOrigin, reflectDir);
-    var reflect = castRay(reflectRay, scene, depth - 1);
-    return { diffuse: diffuse, specular: specular, reflect: reflect };
+    var reflectDir = ray.d.reflect(hit.N);
+    var reflect = castRay(new Ray(hit.p, reflectDir), scene, depth - 1);
+    // compute refraction color
+    var refractDir = ray.d.refract(hit.N, hit.material.refrInd);
+    var refract = castRay(new Ray(hit.p, refractDir), scene, depth - 1);
+    return { diffuse: diffuse, specular: specular, reflect: reflect, refract: refract };
 }
 /************* EXAMPLE SCENE SETUP ***************/
 var red = new Material(new Color(1, 0, 0));
@@ -407,14 +404,15 @@ var sceneGFS = {
 };
 // scene from Tiny Raytracer tutorial
 // note: I changed the direction of camera to be positive, so z-coordinates are positive
-var ivory = new Material(new Color(0.4, 0.4, 0.3), { diffuse: 0.6, specular: 0.3, reflection: 0.1 }, 50);
-var red_rubber = new Material(new Color(0.3, 0.1, 0.1), { diffuse: 0.9, specular: 0.1, reflection: 0 }, 10);
-var mirror = new Material(new Color(1, 1, 1), { diffuse: 0, specular: 10, reflection: 0.8 }, 1425);
+var ivory = new Material(new Color(0.4, 0.4, 0.3), { diffuse: 0.6, specular: 0.3, reflection: 0.1, refraction: 0.0 }, 50, 1.0);
+var red_rubber = new Material(new Color(0.3, 0.1, 0.1), { diffuse: 0.9, specular: 0.1, reflection: 0, refraction: 0.0 }, 10, 1.0);
+var mirror = new Material(new Color(1, 1, 1), { diffuse: 0, specular: 10, reflection: 0.8, refraction: 0.0 }, 1425, 1.0);
+var glass = new Material(new Color(0.6, 0.7, 0.8), { diffuse: 0, specular: 0.5, reflection: 0.1, refraction: 0.8 }, 125, 1.5);
 var sceneTR = {
     camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1),
     spheres: [
         new Sphere(new Pt3(-3, 0, 16), 2, ivory),
-        new Sphere(new Pt3(-1, -1.5, 12), 2, mirror),
+        new Sphere(new Pt3(-1, -1.5, 12), 2, glass),
         new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
         new Sphere(new Pt3(7, 5, 18), 4, mirror),
     ],
