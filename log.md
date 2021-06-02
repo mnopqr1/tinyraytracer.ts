@@ -36,3 +36,5 @@
 * 17:19 - can't get refractions to work. There was a TODO in the ray sphere intersection that broke it but even after I fixed that it isn't working (in fact "fixing" that intersection code broke the reflections!). going to look at c++ reference code.
 
 * 18:11 - finally, refractions are working!!! I decided to go for a major refactoring of the code following the C++ reference code. In particular I cleaned up the code for intersections considerable, I bet the bug was there. 
+
+* 23:07 Worked on step 9 in the evening. It was working but I noticed that *no* shadows are rendered anymore since my step 8 refactoring. Will have to look at that another time.

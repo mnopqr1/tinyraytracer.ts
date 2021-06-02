@@ -62,8 +62,11 @@ class Camera {
 // Material
 // Light
 
+interface Obstacle {
+    intersection(ray : Ray) : number;
+}
 
-class Sphere {
+class Sphere implements Obstacle {
     c : Pt3;    // center
     r : number; // radius
     rsq : number; // radius squared
@@ -91,6 +94,41 @@ class Sphere {
         if (t0 < 0.001) { t0 = t1; }
         if (t1 < 0.001) { return null; }
         return t0;
+    }
+}
+
+class Checkerboard implements Obstacle {
+    h : number; // height of the plane, equation y = h.
+    c : Pt3;    // location of the center of the plane (must have c.y = h)
+    w : number; // width
+    d : number; // depth
+    N : Vec3n;
+    m1 : Material;
+    m2 : Material;
+
+    constructor(h : number,
+        c : Pt3, w : number, d : number,
+        m1 : Material = new Material(new Color(.3, .3, .3)), 
+        m2 : Material = new Material(new Color(.3, .2, .1))) { 
+        this.h = h;
+        this.c = c;
+        this.w = w;
+        this.d = d;
+        this.m1 = m1;
+        this.m2 = m2;
+        this.N = new Vec3n(0,1,0);
+    }
+
+    intersection(ray : Ray) : number {
+        if (Math.abs(ray.d.y) < 1e-3) { return null; } // ray with almost-zero y component
+        let t = (this.h - ray.o.y) / ray.d.y; 
+        let p : Pt3 = ray.atTime(t);
+        if (t > 0.001 && Math.abs(p.x - this.c.x) < this.w && Math.abs(p.z - this.c.z) < this.d) { return t; }
+        return null;
+    }
+
+    materialAt(p : Pt3) : Material {
+        return Math.round(.5*p.x + 1000) + Math.round(.5*p.z) & 1 ? this.m1 : this.m2;
     }
 }
 
@@ -389,22 +427,31 @@ function castRay(ray : Ray, scene, depth : number = 0) : Color {
 
 function scene_intersect(ray : Ray, scene) : {p : Pt3, N : Vec3n, material : Material} {
     let tMin : number = Infinity;
-    let hitSphere : Sphere = null;
-    for (let i = 0; i < scene.spheres.length; i++) {
-        let s : Sphere = scene.spheres[i];
+    let hitObstacle : Obstacle = null;
+    for (let i = 0; i < scene.obstacles.length; i++) {
+        let s : Obstacle = scene.obstacles[i];
         let t : number = s.intersection(ray);
         if (t && t < tMin) {
             tMin = t;
-            hitSphere = s;
+            hitObstacle = s;
         }
     }
-    if (!hitSphere) return null;
-    else {
-        let hitPoint : Pt3 = ray.o.translate(ray.d.scale(tMin));
+
+    if (tMin === Infinity) return null;
+    let hitPoint : Pt3 = ray.atTime(tMin);
+    if (hitObstacle instanceof Sphere) {
         return {
             p : hitPoint,
-            N : hitPoint.minus(hitSphere.c).normalize(),
-            material : hitSphere.material
+            N : hitPoint.minus(hitObstacle.c).normalize(),
+            material : hitObstacle.material
+        }
+    }
+
+    if (hitObstacle instanceof Checkerboard) {
+        return {
+            p : hitPoint,
+            N : hitObstacle.N,
+            material : hitObstacle.materialAt(hitPoint)
         }
     }
 }
@@ -418,32 +465,32 @@ function computeLights(hit : {p : Pt3, N : Vec3n, material : Material}, scene, r
     let specular : number = 0;
     
     for (var l of scene.lights) {
+        let lightDirection : Vec3n = null;
+
         if (l.constructor.name === "AmbientLight") {
             diffuse += l.intensity;
         } else { // point light or directional light
-        let lightDirection : Vec3n = null;
-        let t_max : number = null;
         
-        if (l.constructor.name === "PointLight") {
-            lightDirection = l.position.minus(hit.p).normalize();
-            t_max = Math.sqrt(l.position.distancesq(hit.p));
-        }
-        
-        if (l.constructor.name === "DirectionalLight") {
-            lightDirection = l.direction;
-            t_max = Infinity;
-        }
+            if (l.constructor.name === "PointLight") {
+                lightDirection = l.position.minus(hit.p).normalize();
+            } 
+            
+            if (l.constructor.name === "DirectionalLight") {
+                lightDirection = l.direction;
+            }
 
-        let lightRay : Ray = new Ray(l.position, lightDirection);
+            let lightRay : Ray = new Ray(l.position, lightDirection);
 
-        // shadow check: does this light ray hit any other sphere before hitting s?
-        let lightHit = scene_intersect(lightRay, scene);
-        if (lightHit && lightHit.p.distancesq(hit.p) < l.position.distancesq(hit.p)) { continue; }
-
-        diffuse += l.intensity * Math.max(0, lightDirection.dot(hit.N));
-        
-        let specBase : number = Math.max(0, lightDirection.reflect(hit.N).dot(ray.d));
-        specular += Math.pow(specBase, hit.material.specExp) * l.intensity;
+            // shadow check: does this light ray hit anything else before the hit point?
+            let lightHit = scene_intersect(lightRay, scene);
+            
+            if (lightHit && lightHit.p.distancesq(hit.p) < l.position.distancesq(hit.p)) { 
+                continue; 
+            } else {
+                diffuse += l.intensity * Math.max(0, lightDirection.dot(hit.N));
+                let specBase : number = Math.max(0, lightDirection.reflect(hit.N).dot(ray.d));
+                specular += Math.pow(specBase, hit.material.specExp) * l.intensity;
+            }
         }
     }
 
@@ -525,17 +572,18 @@ let sceneTR = {
 	new Pt3(0,0,0),
 	new Vec3(0,0,1),
 	1),
-    spheres: [
-	new Sphere(new Pt3(-3,0,16), 2, ivory),
-	new Sphere(new Pt3(-1, -1.5, 12), 2, glass),
-	new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
-	new Sphere(new Pt3(7, 5, 18), 4, mirror),
+    obstacles: [
+	    new Sphere(new Pt3(-3,0,16), 2, ivory),
+	    new Sphere(new Pt3(-1, -1.5, 12), 2, glass),
+	    new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
+    	new Sphere(new Pt3(7, 5, 18), 4, mirror),
+        new Checkerboard(-4, new Pt3(0, -4, 20), 10, 10)
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
     lights: [
-	new PointLight(new Pt3(-20, 20,  -20), 1.5),
-	new PointLight(new Pt3(30, 50, 25), 1.8),
-	new PointLight(new Pt3(30, 20, -30), 1.7)
+    	new PointLight(new Pt3(-20, 20,  -20), 1.5),
+	    new PointLight(new Pt3(30, 50, 25), 1.8),
+	    new PointLight(new Pt3(30, 20, -30), 1.7),
     ],
     reflection_depth: 3
 };
