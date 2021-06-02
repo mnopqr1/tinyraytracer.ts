@@ -57,10 +57,6 @@ var Camera = /** @class */ (function () {
     }
     return Camera;
 }());
-/********************* SCENE OBJECTS **************************/
-// Sphere
-// Material
-// Light
 var Sphere = /** @class */ (function () {
     function Sphere(c, r, m) {
         this.c = c;
@@ -89,6 +85,34 @@ var Sphere = /** @class */ (function () {
         return t0;
     };
     return Sphere;
+}());
+var Checkerboard = /** @class */ (function () {
+    function Checkerboard(h, c, w, d, m1, m2) {
+        if (m1 === void 0) { m1 = new Material(new Color(.3, .3, .3)); }
+        if (m2 === void 0) { m2 = new Material(new Color(.3, .2, .1)); }
+        this.h = h;
+        this.c = c;
+        this.w = w;
+        this.d = d;
+        this.m1 = m1;
+        this.m2 = m2;
+        this.N = new Vec3n(0, 1, 0);
+    }
+    Checkerboard.prototype.intersection = function (ray) {
+        if (Math.abs(ray.d.y) < 1e-3) {
+            return null;
+        } // ray with almost-zero y component
+        var t = (this.h - ray.o.y) / ray.d.y;
+        var p = ray.atTime(t);
+        if (t > 0.001 && Math.abs(p.x - this.c.x) < this.w && Math.abs(p.z - this.c.z) < this.d) {
+            return t;
+        }
+        return null;
+    };
+    Checkerboard.prototype.materialAt = function (p) {
+        return Math.round(.5 * p.x + 1000) + Math.round(.5 * p.z) & 1 ? this.m1 : this.m2;
+    };
+    return Checkerboard;
 }());
 var standardAlbedo = { diffuse: 1, specular: 1, reflection: 0, refraction: 0 };
 var standardSpecexp = 50;
@@ -322,23 +346,30 @@ function castRay(ray, scene, depth) {
 }
 function scene_intersect(ray, scene) {
     var tMin = Infinity;
-    var hitSphere = null;
-    for (var i = 0; i < scene.spheres.length; i++) {
-        var s = scene.spheres[i];
+    var hitObstacle = null;
+    for (var i = 0; i < scene.obstacles.length; i++) {
+        var s = scene.obstacles[i];
         var t = s.intersection(ray);
         if (t && t < tMin) {
             tMin = t;
-            hitSphere = s;
+            hitObstacle = s;
         }
     }
-    if (!hitSphere)
+    if (tMin === Infinity)
         return null;
-    else {
-        var hitPoint = ray.o.translate(ray.d.scale(tMin));
+    var hitPoint = ray.atTime(tMin);
+    if (hitObstacle instanceof Sphere) {
         return {
             p: hitPoint,
-            N: hitPoint.minus(hitSphere.c).normalize(),
-            material: hitSphere.material
+            N: hitPoint.minus(hitObstacle.c).normalize(),
+            material: hitObstacle.material
+        };
+    }
+    if (hitObstacle instanceof Checkerboard) {
+        return {
+            p: hitPoint,
+            N: hitObstacle.N,
+            material: hitObstacle.materialAt(hitPoint)
         };
     }
 }
@@ -347,29 +378,28 @@ function computeLights(hit, scene, ray, depth) {
     var specular = 0;
     for (var _i = 0, _a = scene.lights; _i < _a.length; _i++) {
         var l = _a[_i];
+        var lightDirection = null;
         if (l.constructor.name === "AmbientLight") {
             diffuse += l.intensity;
         }
         else { // point light or directional light
-            var lightDirection = null;
-            var t_max = null;
             if (l.constructor.name === "PointLight") {
                 lightDirection = l.position.minus(hit.p).normalize();
-                t_max = Math.sqrt(l.position.distancesq(hit.p));
             }
             if (l.constructor.name === "DirectionalLight") {
                 lightDirection = l.direction;
-                t_max = Infinity;
             }
             var lightRay = new Ray(l.position, lightDirection);
-            // shadow check: does this light ray hit any other sphere before hitting s?
+            // shadow check: does this light ray hit anything else before the hit point?
             var lightHit = scene_intersect(lightRay, scene);
             if (lightHit && lightHit.p.distancesq(hit.p) < l.position.distancesq(hit.p)) {
                 continue;
             }
-            diffuse += l.intensity * Math.max(0, lightDirection.dot(hit.N));
-            var specBase = Math.max(0, lightDirection.reflect(hit.N).dot(ray.d));
-            specular += Math.pow(specBase, hit.material.specExp) * l.intensity;
+            else {
+                diffuse += l.intensity * Math.max(0, lightDirection.dot(hit.N));
+                var specBase = Math.max(0, lightDirection.reflect(hit.N).dot(ray.d));
+                specular += Math.pow(specBase, hit.material.specExp) * l.intensity;
+            }
         }
     }
     // compute reflected color
@@ -410,17 +440,18 @@ var mirror = new Material(new Color(1, 1, 1), { diffuse: 0, specular: 10, reflec
 var glass = new Material(new Color(0.6, 0.7, 0.8), { diffuse: 0, specular: 0.5, reflection: 0.1, refraction: 0.8 }, 125, 1.5);
 var sceneTR = {
     camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1),
-    spheres: [
+    obstacles: [
         new Sphere(new Pt3(-3, 0, 16), 2, ivory),
         new Sphere(new Pt3(-1, -1.5, 12), 2, glass),
         new Sphere(new Pt3(1.5, -0.5, 18), 3, red_rubber),
         new Sphere(new Pt3(7, 5, 18), 4, mirror),
+        new Checkerboard(-4, new Pt3(0, -4, 20), 10, 10)
     ],
     bgcolor: new Color(0.2, 0.7, 0.8),
     lights: [
         new PointLight(new Pt3(-20, 20, -20), 1.5),
         new PointLight(new Pt3(30, 50, 25), 1.8),
-        new PointLight(new Pt3(30, 20, -30), 1.7)
+        new PointLight(new Pt3(30, 20, -30), 1.7),
     ],
     reflection_depth: 3
 };
