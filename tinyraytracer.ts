@@ -17,28 +17,29 @@ https://gabrielgambetta.com/computer-graphics-from-scratch/demos/raytracer-01.ht
 let canvas = document.querySelector('#the-canvas') as HTMLCanvasElement;
 let canvas_buffer = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
 
+function worldToCanvas(v : Pt2) : Pt2 {
+  // convert x, y coordinates with origin in middle to
+  // canvas coordinates with origin in lower left corner
+  return new Pt2(canvas.width / 2 + v.x, canvas.height / 2 - v.y - 1);
+}
 function putPixel(v: Pt2, color: Color) : void {
-    // convert x, y coordinates with origin in middle to
-    // canvas coordinates with origin in lower left corner
-  let px = canvas.width / 2 + v.x;
-  let py = canvas.height / 2 - v.y - 1;
-  if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) {
-    return;
-  }
+
+    let p : Pt2 = worldToCanvas(v);
+    if (p.x < 0 || p.x >= canvas.width || p.y < 0 || p.y >= canvas.height) {
+      return;
+    }
     // find the address of this pixel in the buffer
     // and set colors
-  let offset = 4 * px + 4 * canvas_buffer.width * py;
-  canvas_buffer.data[offset++] = 255 * color.r;
-  canvas_buffer.data[offset++] = 255 * color.g;
-  canvas_buffer.data[offset++] = 255 * color.b;
-  canvas_buffer.data[offset++] = 255;    // alpha is always 255
+    let offset = 4 * p.x + 4 * canvas_buffer.width * p.y;
+    canvas_buffer.data[offset++] = 255 * color.r;
+    canvas_buffer.data[offset++] = 255 * color.g;
+    canvas_buffer.data[offset++] = 255 * color.b;
+    canvas_buffer.data[offset++] = 255;    // alpha is always 255
 }
 
 function updateCanvas() {
   canvas.getContext('2d').putImageData(canvas_buffer, 0, 0);
 }
-
-
 
 /******************** SCENE AND CAMERA *********************/
 
@@ -58,7 +59,10 @@ class Camera {
 
 
 /********************* SCENE OBJECTS **************************/
-// Sphere
+// Obstacle
+  // Sphere
+  // Checkerboard
+
 // Material
 // Light
 
@@ -401,12 +405,14 @@ function castRay(ray : Ray, scene, depth : number = 0) : Color {
     // end recursion
     if (depth < 0) {
 	    return scene.bgcolor;
+      // return getBackground(ray); TODO
     }
 
     let hit : {p : Pt3, N : Vec3n, material : Material} = scene_intersect(ray, scene);
 
     if (hit == null) {
 	    return scene.bgcolor; // return background color if no intersection found
+      // return getBackground(ray); TODO
     }
 
     let lightsAtPoint :
@@ -589,10 +595,45 @@ let sceneTR = {
 };
 
 
+/****** ATTEMPT AT HOMEWORK 1: ENVMAP ******/
+let background_sphere = new Sphere(new Pt3(0,0,0), 1000, null);
+
+let canvas_bg = document.createElement("canvas");
+let canvas_buffer_bg;
+
+// TODO : not working at the moment
+function getBackground(ray : Ray) : Color {
+  let t = background_sphere.intersection(ray);
+  if (t == null) { return new Color(1,0,0); }
+  // let p = new Pt2(10, 50);
+  let v : Pt3 = ray.atTime(t);
+  if (v.x > 0 && v.y > 0) {
+    let p : Pt2 = worldToCanvas(new Pt2(v.x, v.y));
+    let offset = 4 * p.x + 4 * canvas_buffer_bg.width * p.y;
+    return new Color(canvas_buffer_bg.data[offset] / 255, canvas_buffer_bg.data[offset+ 1] / 255, canvas_buffer_bg.data[offset+ 2] / 255);
+    //canvas_buffer.data[offset+ 3] = 255;    // alpha is always 255
+  } else {
+    return new Color(0,1,0);
+  }
+}
+
+
 /********************* ENTRY POINT **********************/
 function main() {
+  // for environment map loading
+  // TODO figure out how to do this "onload" more elegantly
+  // let image_dl = new Image();
+  // let image_bg = new Image();
+  // image_dl.onload = function() {
+  //   image_bg.src = image_dl.src;
+  //   canvas_bg.width = image_bg.width;
+  //   canvas_bg.height = image_bg.height;
+  //   canvas_bg.getContext("2d").drawImage(image_bg, 0, 0);
+  //   canvas_buffer_bg = canvas_bg.getContext("2d").getImageData(0, 0, canvas_bg.width, canvas_bg.height);
     render(sceneTR);
     updateCanvas();
+  // }
+  // image_dl.src = "envmap.jpeg";
 }
 
 main();
