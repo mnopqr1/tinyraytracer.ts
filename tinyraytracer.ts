@@ -1,4 +1,4 @@
-/** Tiny raytracer on a train 
+/** Tiny raytracer on a train
  Following https://github.com/ssloy/tinyraytracer/wiki/
 **/
 
@@ -7,9 +7,9 @@
 // putPixel
 // updateCanvas
 
-/** this part of the code is strongly based on 
+/** this part of the code is strongly based on
 Gabriel Gambetta's Computer Graphics from Scratch
-https://gabrielgambetta.com/computer-graphics-from-scratch/demos/raytracer-01.html 
+https://gabrielgambetta.com/computer-graphics-from-scratch/demos/raytracer-01.html
 */
 
 // get the canvas element and its image data from the html document
@@ -71,7 +71,7 @@ class Sphere implements Obstacle {
     r : number; // radius
     rsq : number; // radius squared
     material : Material;
-    
+
     constructor(c : Pt3, r : number, m : Material) {
 	this.c = c;
 	this.r = r;
@@ -108,8 +108,8 @@ class Checkerboard implements Obstacle {
 
     constructor(h : number,
         c : Pt3, w : number, d : number,
-        m1 : Material = new Material(new Color(.3, .3, .3)), 
-        m2 : Material = new Material(new Color(.3, .2, .1))) { 
+        m1 : Material = new Material(new Color(.3, .3, .3)),
+        m2 : Material = new Material(new Color(.3, .2, .1))) {
         this.h = h;
         this.c = c;
         this.w = w;
@@ -121,7 +121,7 @@ class Checkerboard implements Obstacle {
 
     intersection(ray : Ray) : number {
         if (Math.abs(ray.d.y) < 1e-3) { return null; } // ray with almost-zero y component
-        let t = (this.h - ray.o.y) / ray.d.y; 
+        let t = (this.h - ray.o.y) / ray.d.y;
         let p : Pt3 = ray.atTime(t);
         if (t > 0.001 && Math.abs(p.x - this.c.x) < this.w && Math.abs(p.z - this.c.z) < this.d) { return t; }
         return null;
@@ -142,9 +142,9 @@ class Material {
     specExp : number;
     refrInd : number;
 
-    constructor(color : Color, 
-        albedo = standardAlbedo, 
-        specExp : number = standardSpecexp, 
+    constructor(color : Color,
+        albedo = standardAlbedo,
+        specExp : number = standardSpecexp,
         refrInd : number = standardRefrind) {
 	this.color = color;
 	this.albedo = albedo;
@@ -186,7 +186,7 @@ class DirectionalLight extends Light {
 	super(null, direction, intensity);
 	return this;
     }
-}   
+}
 
 /********************* INTERNAL TYPES *************/
 // Pt2: two-dimensional point
@@ -241,7 +241,7 @@ class Vec3 {
     x : number;
     y : number;
     z : number;
-    
+
     constructor(x : number, y : number, z : number) {
 	this.x = x;
 	this.y = y;
@@ -279,8 +279,8 @@ class Vec3 {
         if (cosIn < 0) { return this.refract(n.scale(-1), etaIn, etaOut)};
         let eta : number = etaIn / etaOut;
         let cosOutSquared : number = 1 - eta * eta * (1 - cosIn * cosIn);
-        return cosOutSquared < 0 ? 
-            new Vec3n(1,0,0) : 
+        return cosOutSquared < 0 ?
+            new Vec3n(1,0,0) :
             this.scale(eta).plus(n.scale(eta * cosIn - Math.sqrt(cosOutSquared))).normalize()
     }
 
@@ -307,7 +307,7 @@ class Vec3n extends Vec3 {
     lengthsq() : number {
 	return 1;
     }
-    
+
     length() : number {
 	return 1;
     }
@@ -351,7 +351,7 @@ class Color {
     r: number;
     g: number;
     b: number;
-    
+
     constructor(r,g,b) {
 	this.r = r;
 	this.g = g;
@@ -379,7 +379,7 @@ function render(scene) {
     let canvToViewport : Pt2 = new Pt2(vwidth / (cwidth), vheight / (cheight));
 
     let campos : Pt3 = scene.camera.position;
-   
+
 
     for (let y = -cheight/2; y < cheight/2; y++) {
 	for (let x = -cwidth/2; x < cwidth/2; x++) {
@@ -402,15 +402,15 @@ function castRay(ray : Ray, scene, depth : number = 0) : Color {
     if (depth < 0) {
 	    return scene.bgcolor;
     }
-    
+
     let hit : {p : Pt3, N : Vec3n, material : Material} = scene_intersect(ray, scene);
-    
+
     if (hit == null) {
 	    return scene.bgcolor; // return background color if no intersection found
-    } 
-    
-    let lightsAtPoint : 
-        { diffuse : number, specular : number, reflect : Color, refract : Color } = 
+    }
+
+    let lightsAtPoint :
+        { diffuse : number, specular : number, reflect : Color, refract : Color } =
     computeLights(hit, scene, ray, depth);
 
     return hit.material.color.scale(
@@ -458,34 +458,34 @@ function scene_intersect(ray : Ray, scene) : {p : Pt3, N : Vec3n, material : Mat
 
 
 
-function computeLights(hit : {p : Pt3, N : Vec3n, material : Material}, scene, ray : Ray, depth : number) : 
+function computeLights(hit : {p : Pt3, N : Vec3n, material : Material}, scene, ray : Ray, depth : number) :
 {diffuse : number, specular : number, reflect : Color, refract : Color} {
 
     let diffuse : number = 0;
     let specular : number = 0;
-    
+
     for (var l of scene.lights) {
         let lightDirection : Vec3n = null;
 
         if (l.constructor.name === "AmbientLight") {
             diffuse += l.intensity;
         } else { // point light or directional light
-        
+
             if (l.constructor.name === "PointLight") {
-                lightDirection = l.position.minus(hit.p).normalize();
-            } 
-            
-            if (l.constructor.name === "DirectionalLight") {
+                lightDirection = l.position.minus(hit.p).normalize(); // is this right?
+            }
+
+            if (l.constructor.name === "DirectionalLight") { // TODO not implemented (doesn't have position)
                 lightDirection = l.direction;
             }
 
-            let lightRay : Ray = new Ray(l.position, lightDirection);
+            let lightRay : Ray = new Ray(hit.p, lightDirection); // ray is coming from the hitpoint, not from the light source!
 
             // shadow check: does this light ray hit anything else before the hit point?
             let lightHit = scene_intersect(lightRay, scene);
-            
-            if (lightHit && lightHit.p.distancesq(hit.p) < l.position.distancesq(hit.p)) { 
-                continue; 
+
+            if (lightHit && lightHit.p.distancesq(hit.p) + 0.001 < l.position.distancesq(hit.p)) {
+                continue;
             } else {
                 diffuse += l.intensity * Math.max(0, lightDirection.dot(hit.N));
                 let specBase : number = Math.max(0, lightDirection.reflect(hit.N).dot(ray.d));
@@ -499,7 +499,7 @@ function computeLights(hit : {p : Pt3, N : Vec3n, material : Material}, scene, r
     let reflect : Color = castRay(new Ray(hit.p, reflectDir), scene, depth - 1);
 
     // compute refraction color
-    let refractDir : Vec3n = ray.d.refract(hit.N, hit.material.refrInd); 
+    let refractDir : Vec3n = ray.d.refract(hit.N, hit.material.refrInd);
     let refract : Color = castRay(new Ray(hit.p, refractDir), scene, depth - 1);
 
     return {diffuse, specular, reflect, refract};
@@ -569,7 +569,7 @@ let glass : Material = new Material (
 
 let sceneTR = {
     camera : new Camera(
-	new Pt3(0,0,0),
+	new Pt3(0,0,-2),
 	new Vec3(0,0,1),
 	1),
     obstacles: [

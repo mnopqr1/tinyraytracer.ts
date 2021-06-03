@@ -384,15 +384,15 @@ function computeLights(hit, scene, ray, depth) {
         }
         else { // point light or directional light
             if (l.constructor.name === "PointLight") {
-                lightDirection = l.position.minus(hit.p).normalize();
+                lightDirection = l.position.minus(hit.p).normalize(); // is this right?
             }
-            if (l.constructor.name === "DirectionalLight") {
+            if (l.constructor.name === "DirectionalLight") { // TODO not implemented (doesn't have position)
                 lightDirection = l.direction;
             }
-            var lightRay = new Ray(l.position, lightDirection);
+            var lightRay = new Ray(hit.p, lightDirection); // ray is coming from the hitpoint, not from the light source!
             // shadow check: does this light ray hit anything else before the hit point?
             var lightHit = scene_intersect(lightRay, scene);
-            if (lightHit && lightHit.p.distancesq(hit.p) < l.position.distancesq(hit.p)) {
+            if (lightHit && lightHit.p.distancesq(hit.p) + 0.001 < l.position.distancesq(hit.p)) {
                 continue;
             }
             else {
@@ -439,7 +439,7 @@ var red_rubber = new Material(new Color(0.3, 0.1, 0.1), { diffuse: 0.9, specular
 var mirror = new Material(new Color(1, 1, 1), { diffuse: 0, specular: 10, reflection: 0.8, refraction: 0.0 }, 1425, 1.0);
 var glass = new Material(new Color(0.6, 0.7, 0.8), { diffuse: 0, specular: 0.5, reflection: 0.1, refraction: 0.8 }, 125, 1.5);
 var sceneTR = {
-    camera: new Camera(new Pt3(0, 0, 0), new Vec3(0, 0, 1), 1),
+    camera: new Camera(new Pt3(0, 0, -2), new Vec3(0, 0, 1), 1),
     obstacles: [
         new Sphere(new Pt3(-3, 0, 16), 2, ivory),
         new Sphere(new Pt3(-1, -1.5, 12), 2, glass),
